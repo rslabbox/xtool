@@ -1,6 +1,6 @@
 [package]
 name = "xtool"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 description = "Amazing Tools"
 documentation = "https://docs.rs/xtool"
