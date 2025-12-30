@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
                 "[{} {} {}:{}] {}",
                 chrono::Local::now().format("%H:%M:%S"),
                 record.level(),
-                record.file().unwrap_or("unknown"),
+                record.target(),
                 record.line().unwrap_or(0),
                 record.args()
             )
