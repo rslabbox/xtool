@@ -2,5 +2,13 @@
 name = "xtool"
 version = "0.0.1"
 edition = "2024"
+description = "Amazing Tools"
+documentation = "https://docs.rs/xtool"
+keywords = ["amazing", "tools", "xtool"]
+categories = ["command-line-utilities", "development-tools"]
+authors = [ "Debin <luodeb@outlook.com>" ]
+license = "Apache-2.0"
+homepage = "https://github.com/luodeb/xtool.git"
+repository = "https://github.com/luodeb/xtool.git"
 
 [dependencies]
