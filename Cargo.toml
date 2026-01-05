@@ -1,6 +1,6 @@
 [package]
 name = "xtool"
-version = "0.0.4"
+version = "0.0.5"
 edition = "2024"
 description = "Amazing Tools"
 documentation = "https://docs.rs/xtool"
@@ -8,8 +8,8 @@ keywords = ["amazing", "tools", "xtool"]
 categories = ["command-line-utilities", "development-tools"]
 authors = [ "Debin <luodeb@outlook.com>" ]
 license = "Apache-2.0"
-homepage = "https://github.com/luodeb/xtool.git"
-repository = "https://github.com/luodeb/xtool.git"
+homepage = "https://github.com/rslabbox/xtool.git"
+repository = "https://github.com/rslabbox/xtool.git"
 
 [dependencies]
 anyhow = "1.0"
