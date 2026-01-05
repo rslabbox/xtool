@@ -1,6 +1,6 @@
-﻿mod config;
-mod tftp;
+mod config;
 mod serial;
+mod tftp;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -78,13 +78,14 @@ fn main() -> Result<()> {
         .init();
 
     let cli = Cli::parse();
-    
+
     // Try to load configuration file
     let config_path = ".xtool.toml";
     let app_config = if std::path::Path::new(config_path).exists() {
         match config::AppConfig::load_from_file(config_path) {
             Ok(cfg) => {
-                let abs_path = std::fs::canonicalize(config_path).unwrap_or_else(|_| std::path::PathBuf::from(config_path));
+                let abs_path = std::fs::canonicalize(config_path)
+                    .unwrap_or_else(|_| std::path::PathBuf::from(config_path));
                 info!("Using configuration file: {}", abs_path.display());
                 Some(cfg)
             }
@@ -117,16 +118,17 @@ fn main() -> Result<()> {
 
         Commands::Tftpc { action } => {
             // Client configuration merging is handled inside client::run_with_config
-            tftp::client::run_with_config(action, app_config.as_ref().and_then(|c| c.tftpc.as_ref()))?;
+            tftp::client::run_with_config(
+                action,
+                app_config.as_ref().and_then(|c| c.tftpc.as_ref()),
+            )?;
         }
 
         Commands::Serial { action } => {
             serial::run(action, app_config.as_ref().and_then(|c| c.serial.clone()))?;
         }
 
-        Commands::Genconfig {
-            force,
-        } => {
+        Commands::Genconfig { force } => {
             if let Err(e) = config::AppConfig::generate_config_file(force) {
                 error!("Error: {}", e);
                 std::process::exit(1);

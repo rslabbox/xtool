@@ -1,4 +1,4 @@
-﻿//! TFTP server implementation
+//! TFTP server implementation
 //!
 //! This module provides complete TFTP server functionality:
 //! - `server`: Main server logic, handles client requests
@@ -27,19 +27,22 @@ pub fn run_with_config(
     config: Option<Config>,
 ) -> Result<()> {
     let server_config = config.unwrap_or_default();
-    let config = server_config.merge_cli(
-        ip,
-        port,
-        path,
-        read_only,
-        single_port,
-    );
+    let config = server_config.merge_cli(ip, port, path, read_only, single_port);
 
     let ip = config.ip.as_deref().unwrap_or("0.0.0.0");
     let port = config.port.unwrap_or(69);
-    let directory = config.directory.clone().unwrap_or_else(|| PathBuf::from("."));
-    let receive_directory = config.receive_directory.clone().unwrap_or_else(|| directory.clone());
-    let send_directory = config.send_directory.clone().unwrap_or_else(|| directory.clone());
+    let directory = config
+        .directory
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("."));
+    let receive_directory = config
+        .receive_directory
+        .clone()
+        .unwrap_or_else(|| directory.clone());
+    let send_directory = config
+        .send_directory
+        .clone()
+        .unwrap_or_else(|| directory.clone());
     let read_only = config.read_only.unwrap_or(false);
     let single_port = config.single_port.unwrap_or(false);
 
@@ -51,11 +54,17 @@ pub fn run_with_config(
 
     // Ensure directories exist
     if !receive_directory.exists() {
-        log::error!("Receive directory does not exist: {}", receive_directory.display());
+        log::error!(
+            "Receive directory does not exist: {}",
+            receive_directory.display()
+        );
         return Err(anyhow::anyhow!("Receive directory does not exist"));
     }
     if !send_directory.exists() {
-        log::error!("Send directory does not exist: {}", send_directory.display());
+        log::error!(
+            "Send directory does not exist: {}",
+            send_directory.display()
+        );
         return Err(anyhow::anyhow!("Send directory does not exist"));
     }
 

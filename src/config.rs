@@ -1,11 +1,11 @@
-﻿use log::info;
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::fs;
 
+use crate::serial::config::SerialConfig;
 use crate::tftp::client::config::ClientConfig;
 use crate::tftp::client::config::TftpcConfigFile;
 use crate::tftp::server::config::Config as TftpdConfig;
-use crate::serial::config::SerialConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
@@ -26,21 +26,24 @@ impl AppConfig {
 
     pub fn generate_config_file(force: bool) -> anyhow::Result<()> {
         use std::io::Write;
-        
+
         let config_path = ".xtool.toml";
-        
+
         // Check if file already exists
         if std::path::Path::new(config_path).exists() && !force {
-            anyhow::bail!("Configuration file {} already exists. Use --force to overwrite.", config_path);
+            anyhow::bail!(
+                "Configuration file {} already exists. Use --force to overwrite.",
+                config_path
+            );
         }
-        
+
         // Generate configuration content
         let config_content = Self::generate_full_config();
-        
+
         // Write to file
         let mut file = fs::File::create(config_path)?;
         file.write_all(config_content.as_bytes())?;
-        
+
         info!("Configuration file generated: {}", config_path);
         info!("Contains full configuration (server + client)");
         info!("Please edit this file to customize configuration");
@@ -59,8 +62,11 @@ impl AppConfig {
                 baud: Some(115200),
             }),
         };
-        
+
         let toml_content = toml::to_string_pretty(&config).unwrap();
-        format!("# xtool configuration file\n# All fields are optional, command line arguments override config file values\n\n{}", toml_content)
+        format!(
+            "# xtool configuration file\n# All fields are optional, command line arguments override config file values\n\n{}",
+            toml_content
+        )
     }
 }

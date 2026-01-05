@@ -55,10 +55,19 @@ impl Server {
         let port = config.port.unwrap_or(69);
 
         let socket = UdpSocket::bind(SocketAddr::from((ip_addr, port)))?;
-        
-        let directory = config.directory.clone().unwrap_or_else(|| PathBuf::from("."));
-        let receive_directory = config.receive_directory.clone().unwrap_or_else(|| directory.clone());
-        let send_directory = config.send_directory.clone().unwrap_or_else(|| directory.clone());
+
+        let directory = config
+            .directory
+            .clone()
+            .unwrap_or_else(|| PathBuf::from("."));
+        let receive_directory = config
+            .receive_directory
+            .clone()
+            .unwrap_or_else(|| directory.clone());
+        let send_directory = config
+            .send_directory
+            .clone()
+            .unwrap_or_else(|| directory.clone());
 
         let server = Server {
             socket,

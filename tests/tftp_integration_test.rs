@@ -28,13 +28,8 @@ fn cleanup_test_env(test_dir: &PathBuf) {
 
 fn start_test_server(port: u16, root_dir: PathBuf) -> thread::JoinHandle<()> {
     thread::spawn(move || {
-        let config = Config::default().merge_cli(
-            "127.0.0.1".to_string(),
-            port,
-            root_dir,
-            false,
-            false,
-        );
+        let config =
+            Config::default().merge_cli("127.0.0.1".to_string(), port, root_dir, false, false);
         let mut server = Server::new(&config).unwrap();
         server.listen();
     })

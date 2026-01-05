@@ -1,5 +1,5 @@
-﻿use std::time::Duration;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TftpcConfigFile {
@@ -36,7 +36,7 @@ impl ClientConfig {
             mode: Some("octet".to_string()),
         }
     }
-    
+
     pub fn merge_cli(
         mut self,
         cli_server: String,
@@ -46,12 +46,24 @@ impl ClientConfig {
     ) -> Self {
         // CLI args are used if config file doesn't specify them
         // (Matching previous behavior: File > CLI)
-        if self.server.is_none() { self.server = Some(cli_server); }
-        if self.port.is_none() { self.port = Some(cli_port); }
-        if self.block_size.is_none() { self.block_size = Some(cli_block_size); }
-        if self.timeout.is_none() { self.timeout = Some(Duration::from_secs(cli_timeout)); }
-        if self.window_size.is_none() { self.window_size = Some(1); }
-        if self.mode.is_none() { self.mode = Some("octet".to_string()); }
+        if self.server.is_none() {
+            self.server = Some(cli_server);
+        }
+        if self.port.is_none() {
+            self.port = Some(cli_port);
+        }
+        if self.block_size.is_none() {
+            self.block_size = Some(cli_block_size);
+        }
+        if self.timeout.is_none() {
+            self.timeout = Some(Duration::from_secs(cli_timeout));
+        }
+        if self.window_size.is_none() {
+            self.window_size = Some(1);
+        }
+        if self.mode.is_none() {
+            self.mode = Some("octet".to_string());
+        }
         self
     }
 

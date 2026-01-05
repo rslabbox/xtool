@@ -1,4 +1,4 @@
-﻿//! TFTP client implementation
+//! TFTP client implementation
 //!
 //! This module provides TFTP client functionality:
 //! - File download (GET/RRQ)
@@ -104,7 +104,10 @@ pub enum TftpcAction {
 }
 
 /// Run TFTP client command with configuration
-pub fn run_with_config(action: TftpcAction, config: Option<&config::TftpcConfigFile>) -> Result<()> {
+pub fn run_with_config(
+    action: TftpcAction,
+    config: Option<&config::TftpcConfigFile>,
+) -> Result<()> {
     match action {
         TftpcAction::Get {
             server,
@@ -115,20 +118,20 @@ pub fn run_with_config(action: TftpcAction, config: Option<&config::TftpcConfigF
             timeout,
         } => {
             let client_config = config.and_then(|c| c.get.clone()).unwrap_or_default();
-            let cfg = client_config.merge_cli(
-                server.clone(),
-                port,
-                block_size,
-                timeout,
-            );
-            
+            let cfg = client_config.merge_cli(server.clone(), port, block_size, timeout);
+
             let local_path = local_file.unwrap_or_else(|| PathBuf::from(&remote_file));
 
             // Note: cfg.server is Option<String>, but merge_cli ensures it's set if cli_server is provided
             let server_display = cfg.server.as_deref().unwrap_or("unknown");
             let port_display = cfg.port.unwrap_or(69);
 
-            log::info!("Downloading {} from {}:{}", remote_file, server_display, port_display);
+            log::info!(
+                "Downloading {} from {}:{}",
+                remote_file,
+                server_display,
+                port_display
+            );
             log::info!("Saving to: {}", local_path.display());
 
             let client = Client::new(cfg)?;
@@ -146,12 +149,7 @@ pub fn run_with_config(action: TftpcAction, config: Option<&config::TftpcConfigF
             timeout,
         } => {
             let client_config = config.and_then(|c| c.put.clone()).unwrap_or_default();
-            let cfg = client_config.merge_cli(
-                server.clone(),
-                port,
-                block_size,
-                timeout,
-            );
+            let cfg = client_config.merge_cli(server.clone(), port, block_size, timeout);
 
             if !local_file.exists() {
                 log::error!("Local file does not exist: {}", local_file.display());
@@ -169,7 +167,12 @@ pub fn run_with_config(action: TftpcAction, config: Option<&config::TftpcConfigF
             let server_display = cfg.server.as_deref().unwrap_or("unknown");
             let port_display = cfg.port.unwrap_or(69);
 
-            log::info!("Uploading {} to {}:{}", local_file.display(), server_display, port_display);
+            log::info!(
+                "Uploading {} to {}:{}",
+                local_file.display(),
+                server_display,
+                port_display
+            );
             log::info!("Remote file: {}", remote_name);
 
             let client = Client::new(cfg)?;
