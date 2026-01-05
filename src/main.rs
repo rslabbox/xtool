@@ -3,6 +3,7 @@ mod tftp;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use log::error;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -76,11 +77,11 @@ fn main() -> Result<()> {
     let app_config = if std::path::Path::new(config_path).exists() {
         match config::AppConfig::load_from_file(config_path) {
             Ok(cfg) => {
-                eprintln!("Using configuration file: {}", config_path);
+                error!("Using configuration file: {}", config_path);
                 Some(cfg)
             }
             Err(e) => {
-                eprintln!("Failed to load configuration file: {}, using defaults", e);
+                error!("Failed to load configuration file: {}, using defaults", e);
                 None
             }
         }
@@ -115,7 +116,7 @@ fn main() -> Result<()> {
             force,
         } => {
             if let Err(e) = config::AppConfig::generate_config_file(force) {
-                eprintln!("Error: {}", e);
+                error!("Error: {}", e);
                 std::process::exit(1);
             }
         }

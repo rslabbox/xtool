@@ -1,4 +1,5 @@
-﻿use serde::{Deserialize, Serialize};
+﻿use log::info;
+use serde::{Deserialize, Serialize};
 use std::fs;
 
 use crate::tftp::client::config::ClientConfig;
@@ -37,9 +38,9 @@ impl AppConfig {
         let mut file = fs::File::create(config_path)?;
         file.write_all(config_content.as_bytes())?;
         
-        println!("Configuration file generated: {}", config_path);
-        println!("Contains full configuration (server + client)");
-        println!("Please edit this file to customize configuration");
+        info!("Configuration file generated: {}", config_path);
+        info!("Contains full configuration (server + client)");
+        info!("Please edit this file to customize configuration");
         Ok(())
     }
 
