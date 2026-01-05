@@ -1,9 +1,10 @@
 ﻿mod config;
 mod tftp;
+mod serial;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use log::error;
+use log::{error, info};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -45,6 +46,12 @@ enum Commands {
         action: tftp::client::TftpcAction,
     },
 
+    /// Serial port tools - list ports or monitor
+    Serial {
+        #[command(subcommand)]
+        action: serial::SerialAction,
+    },
+
     /// Generate configuration file (.xtool.toml) in current directory
     Genconfig {
         /// Force overwrite existing configuration file
@@ -77,7 +84,8 @@ fn main() -> Result<()> {
     let app_config = if std::path::Path::new(config_path).exists() {
         match config::AppConfig::load_from_file(config_path) {
             Ok(cfg) => {
-                error!("Using configuration file: {}", config_path);
+                let abs_path = std::fs::canonicalize(config_path).unwrap_or_else(|_| std::path::PathBuf::from(config_path));
+                info!("Using configuration file: {}", abs_path.display());
                 Some(cfg)
             }
             Err(e) => {
@@ -110,6 +118,10 @@ fn main() -> Result<()> {
         Commands::Tftpc { action } => {
             // Client configuration merging is handled inside client::run_with_config
             tftp::client::run_with_config(action, app_config.as_ref().and_then(|c| c.tftpc.as_ref()))?;
+        }
+
+        Commands::Serial { action } => {
+            serial::run(action, app_config.as_ref().and_then(|c| c.serial.clone()))?;
         }
 
         Commands::Genconfig {

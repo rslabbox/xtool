@@ -1,6 +1,6 @@
 [package]
 name = "xtool"
-version = "0.0.3"
+version = "0.0.4"
 edition = "2024"
 description = "Amazing Tools"
 documentation = "https://docs.rs/xtool"
@@ -19,8 +19,10 @@ log = "0.4"
 env_logger = "0.11"
 chrono = "0.4"
 serde = { version = "1.0", features = ["derive"] }
-toml = "0.8"
+toml = "0.9"
 humantime-serde = "1.1"
+serialport = "4.3"
+crossterm = "0.29"
 
 [dev-dependencies]
 serial_test = "3.2"

@@ -69,6 +69,30 @@ xtool tftpc put 192.168.1.100 local_file.txt remote_name.txt
 xtool tftpc put 192.168.1.100 local_file.txt -p 6969 -b 8192 -t 10
 ```
 
+### Serial Console
+
+List available serial ports:
+
+```bash
+xtool serial list
+```
+
+Monitor a serial port (interactive shell):
+
+```bash
+# Monitor COM1 with default baud rate (115200)
+xtool serial monitor COM1
+
+# Monitor with specific baud rate
+xtool serial monitor COM1 -b 9600
+
+# Use configuration file defaults (if port is set in .xtool.toml)
+xtool serial monitor
+```
+
+Key bindings:
+- `Ctrl + ]`: Exit monitor mode
+
 ### Options
 
 **Server Options:**
@@ -81,6 +105,9 @@ xtool tftpc put 192.168.1.100 local_file.txt -p 6969 -b 8192 -t 10
 - `-p, --port <PORT>`: Server port (default: 69)
 - `-b, --block-size <SIZE>`: Block size in bytes (default: 512, max: 65464)
 - `-t, --timeout <SECONDS>`: Timeout in seconds (default: 5)
+
+**Serial Options:**
+- `-b, --baud <RATE>`: Baud rate (default: 115200)
 
 ## Examples
 

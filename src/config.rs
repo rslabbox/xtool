@@ -5,6 +5,7 @@ use std::fs;
 use crate::tftp::client::config::ClientConfig;
 use crate::tftp::client::config::TftpcConfigFile;
 use crate::tftp::server::config::Config as TftpdConfig;
+use crate::serial::config::SerialConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
@@ -12,6 +13,8 @@ pub struct AppConfig {
     pub tftpd: Option<TftpdConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tftpc: Option<TftpcConfigFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub serial: Option<SerialConfig>,
 }
 
 impl AppConfig {
@@ -51,7 +54,12 @@ impl AppConfig {
                 get: Some(ClientConfig::new("127.0.0.1".to_string(), 69)),
                 put: Some(ClientConfig::new("127.0.0.1".to_string(), 69)),
             }),
+            serial: Some(SerialConfig {
+                port: Some("COM1".to_string()),
+                baud: Some(115200),
+            }),
         };
+        
         let toml_content = toml::to_string_pretty(&config).unwrap();
         format!("# xtool configuration file\n# All fields are optional, command line arguments override config file values\n\n{}", toml_content)
     }
