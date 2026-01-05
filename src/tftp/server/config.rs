@@ -12,10 +12,6 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub directory: Option<PathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub receive_directory: Option<PathBuf>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub send_directory: Option<PathBuf>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub single_port: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub read_only: Option<bool>,
@@ -38,9 +34,7 @@ impl Config {
         Self {
             ip: Some("0.0.0.0".to_string()),
             port: Some(69),
-            directory: None,
-            receive_directory: None,
-            send_directory: None,
+            directory: Some(PathBuf::from(".")),
             single_port: Some(false),
             read_only: Some(false),
             overwrite: Some(true),

@@ -37,8 +37,7 @@ use crate::tftp::core::OptionType;
 /// ```
 pub struct Server {
     socket: UdpSocket,
-    receive_directory: PathBuf,
-    send_directory: PathBuf,
+    directory: PathBuf,
     single_port: bool,
     read_only: bool,
     overwrite: bool,
@@ -60,19 +59,12 @@ impl Server {
             .directory
             .clone()
             .unwrap_or_else(|| PathBuf::from("."));
-        let receive_directory = config
-            .receive_directory
-            .clone()
-            .unwrap_or_else(|| directory.clone());
-        let send_directory = config
-            .send_directory
-            .clone()
-            .unwrap_or_else(|| directory.clone());
+        let directory = std::fs::canonicalize(&directory).unwrap_or(directory);
+        log::info!("TFTP root directory: {}", directory.display());
 
         let server = Server {
             socket,
-            receive_directory,
-            send_directory,
+            directory,
             single_port: config.single_port.unwrap_or(false),
             read_only: config.read_only.unwrap_or(false),
             overwrite: config.overwrite.unwrap_or(true),
@@ -161,8 +153,8 @@ impl Server {
         to: &SocketAddr,
     ) -> anyhow::Result<()> {
         let file_path = convert_file_path(&filename);
-        let file_path = &self.send_directory.join(file_path);
-        match check_file_exists(file_path, &self.send_directory) {
+        let file_path = &self.directory.join(file_path);
+        match check_file_exists(file_path, &self.directory) {
             ErrorCode::FileNotFound => {
                 log::warn!("Cannot find requested file: {}", file_path.display());
                 Socket::send_to(
@@ -235,7 +227,7 @@ impl Server {
         to: &SocketAddr,
     ) -> anyhow::Result<()> {
         let file_path = convert_file_path(&filename);
-        let file_path = &self.receive_directory.join(file_path);
+        let file_path = &self.directory.join(file_path);
         let initialize_write = &mut || -> anyhow::Result<()> {
             let worker_options = OptionsProtocol::parse(options, RequestType::Write)?;
             let mut socket: Box<dyn Socket>;
@@ -266,7 +258,7 @@ impl Server {
             Ok(())
         };
 
-        match check_file_exists(file_path, &self.receive_directory) {
+        match check_file_exists(file_path, &self.directory) {
             ErrorCode::FileExists => {
                 if self.overwrite {
                     initialize_write()

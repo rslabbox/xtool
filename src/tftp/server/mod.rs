@@ -35,37 +35,17 @@ pub fn run_with_config(
         .directory
         .clone()
         .unwrap_or_else(|| PathBuf::from("."));
-    let receive_directory = config
-        .receive_directory
-        .clone()
-        .unwrap_or_else(|| directory.clone());
-    let send_directory = config
-        .send_directory
-        .clone()
-        .unwrap_or_else(|| directory.clone());
     let read_only = config.read_only.unwrap_or(false);
     let single_port = config.single_port.unwrap_or(false);
 
     log::info!("Starting TFTP server on {}:{}", ip, port);
-    log::info!("Receive directory: {}", receive_directory.display());
-    log::info!("Send directory: {}", send_directory.display());
     log::info!("Read-only mode: {}", read_only);
     log::info!("Single port mode: {}", single_port);
 
-    // Ensure directories exist
-    if !receive_directory.exists() {
-        log::error!(
-            "Receive directory does not exist: {}",
-            receive_directory.display()
-        );
-        return Err(anyhow::anyhow!("Receive directory does not exist"));
-    }
-    if !send_directory.exists() {
-        log::error!(
-            "Send directory does not exist: {}",
-            send_directory.display()
-        );
-        return Err(anyhow::anyhow!("Send directory does not exist"));
+    // Ensure directory exists
+    if !directory.exists() {
+        log::error!("Directory does not exist: {}", directory.display());
+        return Err(anyhow::anyhow!("Directory does not exist"));
     }
 
     let mut server = Server::new(&config)?;

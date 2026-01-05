@@ -65,9 +65,10 @@ fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
         .format(|buf, record| {
             use std::io::Write;
+            let level_style = buf.default_level_style(record.level());
             writeln!(
                 buf,
-                "[{} {} {}:{}] {}",
+                "[{} {level_style}{}{level_style:#} {}:{}] {level_style}{}{level_style:#}",
                 chrono::Local::now().format("%H:%M:%S"),
                 record.level(),
                 record.target(),
