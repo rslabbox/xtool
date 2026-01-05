@@ -16,6 +16,10 @@ struct Cli {
 enum Commands {
     /// Start a TFTP server
     Tftpd {
+        /// IP address to listen on
+        #[arg(short, long, default_value = "0.0.0.0")]
+        ip: String,
+
         /// Port to listen on
         #[arg(short, long, default_value = "69")]
         port: u16,
@@ -23,11 +27,24 @@ enum Commands {
         /// Root directory for TFTP files
         #[arg(value_name = "PATH")]
         path: PathBuf,
+
+        /// Enable read-only mode
+        #[arg(short, long)]
+        read_only: bool,
+
+        /// Use single port mode (useful for NAT environments)
+        #[arg(short, long)]
+        single_port: bool,
+    },
+
+    /// TFTP client - download or upload files
+    Tftpc {
+        #[command(subcommand)]
+        action: tftp::client::TftpcAction,
     },
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     // 初始化日志，默认 info 等级，显示文件行数和时分秒
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
         .format(|buf, record| {
@@ -47,8 +64,18 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Tftpd { port, path } => {
-            tftp::tftpd::run(port, path).await?;
+        Commands::Tftpd {
+            ip,
+            port,
+            path,
+            read_only,
+            single_port,
+        } => {
+            tftp::server::run(ip, port, path, read_only, single_port)?;
+        }
+
+        Commands::Tftpc { action } => {
+            tftp::client::run(action)?;
         }
     }
 
