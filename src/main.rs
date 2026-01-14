@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "xtool")]
-#[command(about = "Amazing Tools", long_about = None)]
+#[command(version, about = "Amazing Tools", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -46,10 +46,18 @@ enum Commands {
         action: tftp::client::TftpcAction,
     },
 
-    /// Serial port tools - list ports or monitor
+    /// Serial port tools - specify port to monitor, or use 'list' command
     Serial {
+        /// Serial port name (e.g., COM1 or /dev/ttyUSB0). If not provided, will try to use config.
+        #[arg(value_name = "PORT")]
+        port: Option<String>,
+
+        /// Baud rate
+        #[arg(short, long)]
+        baud: Option<u32>,
+
         #[command(subcommand)]
-        action: serial::SerialAction,
+        subcommand: Option<serial::SerialSubcommand>,
     },
 
     /// Generate configuration file (.xtool.toml) in current directory
@@ -125,8 +133,17 @@ fn main() -> Result<()> {
             )?;
         }
 
-        Commands::Serial { action } => {
-            serial::run(action, app_config.as_ref().and_then(|c| c.serial.clone()))?;
+        Commands::Serial {
+            port,
+            baud,
+            subcommand,
+        } => {
+            serial::run(
+                subcommand,
+                port,
+                baud,
+                app_config.as_ref().and_then(|c| c.serial.clone()),
+            )?;
         }
 
         Commands::Genconfig { force } => {

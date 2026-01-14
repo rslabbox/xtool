@@ -53,7 +53,21 @@ impl Server {
         let ip_addr: std::net::IpAddr = ip_str.parse()?;
         let port = config.port.unwrap_or(69);
 
-        let socket = UdpSocket::bind(SocketAddr::from((ip_addr, port)))?;
+        let socket = UdpSocket::bind(SocketAddr::from((ip_addr, port))).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::PermissionDenied && port < 1024 {
+                anyhow::anyhow!(
+                    "Permission denied binding to port {}. \n\
+                    Hint: Ports below 1024 require elevated privileges.\n\
+                    Try: sudo setcap cap_net_bind_service=+eip $(which xtool)\n\
+                    Or run with sudo.\n\
+                    Original error: {}",
+                    port,
+                    e
+                )
+            } else {
+                anyhow::Error::new(e)
+            }
+        })?;
 
         let directory = config
             .directory
