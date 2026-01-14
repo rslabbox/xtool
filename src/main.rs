@@ -49,8 +49,8 @@ enum Commands {
     /// Serial port tools - specify port to monitor, or use 'list' command
     Serial {
         /// Serial port name (e.g., COM1 or /dev/ttyUSB0). If not provided, will try to use config.
-        #[arg(value_name = "PORT")]
-        port: Option<String>,
+        #[arg(value_name = "UART")]
+        uart: Option<String>,
 
         /// Baud rate
         #[arg(short, long)]
@@ -134,13 +134,13 @@ fn main() -> Result<()> {
         }
 
         Commands::Serial {
-            port,
+            uart,
             baud,
             subcommand,
         } => {
             serial::run(
                 subcommand,
-                port,
+                uart,
                 baud,
                 app_config.as_ref().and_then(|c| c.serial.clone()),
             )?;

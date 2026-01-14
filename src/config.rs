@@ -58,8 +58,10 @@ impl AppConfig {
                 put: Some(ClientConfig::new("127.0.0.1".to_string(), 69)),
             }),
             serial: Some(SerialConfig {
-                port: Some("COM1".to_string()),
+                uart: Some("COM1".to_string()),
                 baud: Some(115200),
+                net_port: Some(5432),
+                net_bind: Some("0.0.0.0".to_string()),
             }),
         };
 
