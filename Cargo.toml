@@ -1,6 +1,6 @@
 [package]
 name = "xtool"
-version = "0.0.7"
+version = "0.0.8"
 edition = "2024"
 description = "Amazing Tools"
 documentation = "https://docs.rs/xtool"
@@ -25,6 +25,10 @@ serialport = "4.3"
 tokio-serial = "5.4"
 crossterm = "0.29"
 dialoguer = "0.12.0"
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+tempfile = "3.12"
+walkdir = "2.5"
+zip = "2.2"
 
 [dev-dependencies]
 serial_test = "3.2"

@@ -93,6 +93,28 @@ xtool serial monitor
 Key bindings:
 - `Ctrl + ]`: Exit monitor mode
 
+### File Transfer
+
+Upload a file and get a token:
+
+```bash
+xtool file send ./sample.txt
+# 输出: token
+```
+
+Download a file by token:
+
+```bash
+xtool file get 081607
+```
+
+Specify server and output path:
+
+```bash
+xtool file send ./sample.txt --server http://localhost:3000 --download-limit 2
+xtool file get 081607 --server http://localhost:3000 --output ./downloads/sample.txt
+```
+
 ### Options
 
 **Server Options:**

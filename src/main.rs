@@ -1,4 +1,5 @@
 mod config;
+mod file;
 mod serial;
 mod tftp;
 
@@ -47,6 +48,12 @@ enum Commands {
     Tftpc {
         #[command(subcommand)]
         action: tftp::client::TftpcAction,
+    },
+
+    /// File transfer - upload and download files
+    File {
+        #[command(subcommand)]
+        action: file::FileAction,
     },
 
     /// Serial port tools - specify port to monitor, or use 'list' command
@@ -134,6 +141,10 @@ fn main() -> Result<()> {
                 action,
                 app_config.as_ref().and_then(|c| c.tftpc.as_ref()),
             )?;
+        }
+
+        Commands::File { action } => {
+            file::run(action)?;
         }
 
         Commands::Serial {
