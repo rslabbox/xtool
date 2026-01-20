@@ -7,7 +7,7 @@ mod archive;
 mod download;
 mod upload;
 
-const DEFAULT_SERVER_URL: &str = "http://localhost:3000";
+const DEFAULT_SERVER_URL: &str = "http://8.130.17.158:8080";
 
 #[derive(Subcommand)]
 pub enum FileAction {
@@ -25,7 +25,7 @@ pub enum FileAction {
         #[arg(short, long, default_value_t = 1)]
         limit: u8,
 
-        /// Server URL (e.g. http://localhost:3000)
+        /// Server URL (e.g. http://localhost:8080)
         #[arg(short, long, default_value = DEFAULT_SERVER_URL)]
         server: String,
     },
@@ -40,7 +40,7 @@ pub enum FileAction {
         #[arg(short, long)]
         output: Option<PathBuf>,
 
-        /// Server URL (e.g. http://localhost:3000)
+        /// Server URL (e.g. http://localhost:8080)
         #[arg(short, long, default_value = DEFAULT_SERVER_URL)]
         server: String,
     },
