@@ -2,6 +2,7 @@ use crate::file::archive::{
     is_zip_download, resolve_output_dir, resolve_output_path, unzip_to_dir, write_temp_zip,
     MAX_FILE_SIZE,
 };
+use crate::file::MESSAGE_CONTENT_TYPE;
 use anyhow::{Context, Result};
 use log::info;
 use std::{fs, path::Path};
@@ -36,6 +37,14 @@ pub fn get_file(server: &str, token: &str, output: Option<&Path>) -> Result<()> 
         .to_string();
 
     let bytes = response.bytes().context("Failed to read response body")?;
+    if is_message_download(&content_type) {
+        if bytes.len() as u64 > MAX_FILE_SIZE {
+            return Err(anyhow::anyhow!("Message exceeds 100MB limit"));
+        }
+        let text = String::from_utf8_lossy(&bytes);
+        println!("{}", text);
+        return Ok(());
+    }
     if is_zip_download(&content_type, &filename) {
         let temp_path = write_temp_zip(&bytes)?;
         if bytes.len() as u64 > MAX_FILE_SIZE {
@@ -63,6 +72,7 @@ pub fn get_file(server: &str, token: &str, output: Option<&Path>) -> Result<()> 
 
         info!("Download success: {} ({} bytes)", output_path.display(), bytes.len());
     }
+
     Ok(())
 }
 
@@ -81,4 +91,8 @@ fn parse_filename(header_value: &str) -> Option<String> {
 
 fn normalize_server(server: &str) -> String {
     server.trim_end_matches('/').to_string()
+}
+
+fn is_message_download(content_type: &str) -> bool {
+    content_type.eq_ignore_ascii_case(MESSAGE_CONTENT_TYPE)
 }

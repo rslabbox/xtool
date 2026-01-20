@@ -8,22 +8,27 @@ mod download;
 mod upload;
 
 const DEFAULT_SERVER_URL: &str = "http://8.130.17.158:8080";
+pub const MESSAGE_CONTENT_TYPE: &str = "application/x-xtool-message";
 
 #[derive(Subcommand)]
 pub enum FileAction {
     /// Upload a file and return a token
     Send {
         /// File path to upload
-        #[arg(value_name = "FILE", conflicts_with = "dirpath")]
+        #[arg(value_name = "FILE", conflicts_with_all = ["dirpath", "message"])]
         filepath: Option<PathBuf>,
 
         /// Directory path to upload (will be compressed)
-        #[arg(short = 'd', long, value_name = "DIR", conflicts_with = "filepath")]
+        #[arg(short = 'd', long, value_name = "DIR", conflicts_with_all = ["filepath", "message"])]
         dirpath: Option<PathBuf>,
 
         /// Download limit (1-10)
         #[arg(short, long, default_value_t = 1)]
         limit: u8,
+
+        /// Send a message as a message file (no file upload)
+        #[arg(short = 'm', long, conflicts_with_all = ["filepath", "dirpath"])]
+        message: Option<String>,
 
         /// Server URL (e.g. http://localhost:8080)
         #[arg(short, long, default_value = DEFAULT_SERVER_URL)]
@@ -58,8 +63,15 @@ pub fn run(action: FileAction) -> Result<()> {
             filepath,
             dirpath,
             limit,
+            message,
             server,
-        } => upload::send_file(&server, filepath.as_deref(), dirpath.as_deref(), limit),
+        } => upload::send_file(
+            &server,
+            filepath.as_deref(),
+            dirpath.as_deref(),
+            limit,
+            message.as_deref(),
+        ),
         FileAction::Get {
             token,
             output,
