@@ -49,6 +49,8 @@ pub async fn upload_file(
         return Err(StatusCode::PAYLOAD_TOO_LARGE);
     }
 
+    cleanup_expired_files(&state);
+
     let content_type_value = headers
         .get(header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
@@ -239,6 +241,33 @@ fn parse_download_limit(headers: &HeaderMap) -> Result<u8, StatusCode> {
             } else {
                 Ok(parsed)
             }
+        }
+    }
+}
+
+fn cleanup_expired_files(state: &AppState) {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let mut expired: Vec<(String, PathBuf)> = Vec::new();
+
+    {
+        let mut files = state.files.lock().expect("State lock poisoned");
+        files.retain(|token, record| {
+            let is_expired = now.saturating_sub(record.uploaded_at) >= MAX_FILE_AGE.as_secs();
+            if is_expired {
+                expired.push((token.clone(), record.path.clone()));
+            }
+            !is_expired
+        });
+    }
+
+    for (token, path) in expired {
+        if let Err(err) = fs::remove_file(&path) {
+            error!("Failed to delete expired file {}: {}", path.display(), err);
+        } else {
+            info!("Deleted expired file: {} (token: {})", path.display(), token);
         }
     }
 }
