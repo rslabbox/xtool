@@ -1,5 +1,6 @@
 mod config;
 mod file;
+mod http;
 mod serial;
 mod tftp;
 
@@ -75,6 +76,17 @@ enum Commands {
         /// Force overwrite existing configuration file
         #[arg(long)]
         force: bool,
+    },
+
+    /// Start a HTTP static file server
+    Http {
+        /// Port to listen on
+        #[arg(short, long, default_value = "80")]
+        port: u16,
+
+        /// Root directory to serve
+        #[arg(short = 'd', long, default_value = ".")]
+        path: PathBuf,
     },
 }
 
@@ -165,6 +177,10 @@ fn main() -> Result<()> {
                 error!("Error: {}", e);
                 std::process::exit(1);
             }
+        }
+
+        Commands::Http { port, path } => {
+            http::run(port, path)?;
         }
     }
 
