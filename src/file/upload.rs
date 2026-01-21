@@ -83,7 +83,7 @@ pub fn send_file(
             .json()
             .context("Failed to parse upload response")?;
         info!("Upload success: token={}, name={}", upload_resp.token, upload_resp.filename);
-        println!("{}", upload_resp.token);
+        println!("xtool file get {}", upload_resp.token);
         Ok(())
     } else {
         Err(anyhow::anyhow!("Upload failed: {}", response.status()))
