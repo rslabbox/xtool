@@ -1,14 +1,20 @@
 [package]
 name = "server"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
-axum = "0.8"
+axum = "0.7"
 tokio = { version = "1", features = ["full"] }
 env_logger = "0.11"
 log = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 tokio-util = { version = "0.7", features = ["io"] }
 rand = "0.9"
+anyhow = "1.0"
 dotenvy = "0.15"
+qiniu-upload-token = "0.2.4"
+qiniu-sdk = { version = "0.2.4", features = ["upload", "objects", "credential", "ureq"] }
+reqwest = { version = "0.13.1", features = ["json", "blocking", "rustls"] }
+chrono = "0.4"
+

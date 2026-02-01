@@ -1,8 +1,14 @@
-use crate::file::archive::{compress_directory, MAX_FILE_SIZE, ZIP_CONTENT_TYPE};
-use crate::file::{UploadResponse, MESSAGE_CONTENT_TYPE};
+use crate::file::archive::{compress_directory, MAX_FILE_SIZE};
+use crate::file::UploadResponse;
 use anyhow::{Context, Result};
 use log::info;
-use std::{fs, path::Path, time::{SystemTime, UNIX_EPOCH}};
+use qiniu_sdk::upload::{AutoUploader, AutoUploaderObjectParams, UploadManager, UploadTokenSigner};
+use qiniu_upload_token::StaticUploadTokenProvider;
+use serde::Serialize;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 pub fn send_file(
     server: &str,
@@ -11,7 +17,11 @@ pub fn send_file(
     download_limit: u8,
     message: Option<&str>,
 ) -> Result<()> {
-    let (data, filename, content_type, temp_path) = if let Some(text) = message {
+    let _ = download_limit;
+    let client = reqwest::blocking::Client::new();
+    let server = normalize_server(server);
+
+    if let Some(text) = message {
         let trimmed = text.trim();
         if trimmed.is_empty() {
             return Err(anyhow::anyhow!("Message cannot be empty"));
@@ -20,74 +30,153 @@ pub fn send_file(
         if data.len() as u64 > MAX_FILE_SIZE {
             return Err(anyhow::anyhow!("Message exceeds 100MB limit"));
         }
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
-        let filename = format!("message_{}.txt", nanos);
-        (data, filename, MESSAGE_CONTENT_TYPE.to_string(), None)
-    } else {
-        match (filepath, dirpath) {
-            (Some(path), None) => {
-                let data = fs::read(path).with_context(|| {
-                    format!("Failed to read file: {}", path.display())
-                })?;
-                if data.len() as u64 > MAX_FILE_SIZE {
-                    return Err(anyhow::anyhow!("File exceeds 100MB limit"));
-                }
-                let filename = path
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .unwrap_or("file.bin")
-                    .to_string();
-                (data, filename, "application/octet-stream".to_string(), None)
-            }
-            (None, Some(path)) => {
-                let (zip_path, zip_name, size) = compress_directory(path)?;
-                if size > MAX_FILE_SIZE {
-                    let _ = fs::remove_file(&zip_path);
-                    return Err(anyhow::anyhow!("Compressed file exceeds 100MB limit"));
-                }
-                let data = fs::read(&zip_path).with_context(|| {
-                    format!("Failed to read archive: {}", zip_path.display())
-                })?;
-                (data, zip_name, ZIP_CONTENT_TYPE.to_string(), Some(zip_path))
-            }
-            _ => {
-                return Err(anyhow::anyhow!(
-                    "Please provide either a file path or -d <dir> or -m <message>"
-                ));
-            }
+        let url = format!("{}/upload", server);
+        let response = client
+            .post(&url)
+            .header("x-upload-type", "text")
+            .body(trimmed.to_string())
+            .send()
+            .context("Failed to send text upload request")?;
+
+        if response.status().is_success() {
+            let upload_resp: UploadResponse = response
+                .json()
+                .context("Failed to parse upload response")?;
+            info!("Upload success: id={}", upload_resp.id);
+            println!("xtool file get {}", upload_resp.id);
+            return Ok(());
         }
-    };
 
-    let client = reqwest::blocking::Client::new();
-    let url = format!("{}/upload", normalize_server(server));
-    let request = client
-        .post(&url)
-        .header("x-filename", filename)
-        .header("x-download-limit", download_limit.to_string())
-        .header(reqwest::header::CONTENT_TYPE, content_type)
-        .body(data);
+        return Err(anyhow::anyhow!("Upload text failed: {}", response.status()));
+    }
 
-    let response = request
-        .send()
-        .context("Failed to send upload request")?;
+    let (file_path, filename, temp_path) = resolve_upload_target(filepath, dirpath)?;
+    let (upload_token, key) = request_file_upload(&client, &server, &filename)?;
+    upload_to_qiniu(&file_path, &key, &upload_token)?;
+    let id = complete_upload(&client, &server, &key, &filename)?;
 
     if let Some(path) = temp_path {
         let _ = fs::remove_file(path);
     }
 
-    if response.status().is_success() {
-        let upload_resp: UploadResponse = response
-            .json()
-            .context("Failed to parse upload response")?;
-        info!("Upload success: token={}, name={}", upload_resp.token, upload_resp.filename);
-        println!("xtool file get {}", upload_resp.token);
-        Ok(())
-    } else {
-        Err(anyhow::anyhow!("Upload failed: {}", response.status()))
+    info!("Upload success: id={}, name={}", id, filename);
+    println!("xtool file get {}", id);
+    Ok(())
+}
+
+fn resolve_upload_target(
+    filepath: Option<&Path>,
+    dirpath: Option<&Path>,
+) -> Result<(PathBuf, String, Option<PathBuf>)> {
+    match (filepath, dirpath) {
+        (Some(path), None) => {
+            let metadata = fs::metadata(path)
+                .with_context(|| format!("Failed to read file: {}", path.display()))?;
+            if metadata.len() > MAX_FILE_SIZE {
+                return Err(anyhow::anyhow!("File exceeds 100MB limit"));
+            }
+            let filename = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("file.bin")
+                .to_string();
+            Ok((path.to_path_buf(), filename, None))
+        }
+        (None, Some(path)) => {
+            let (zip_path, zip_name, size) = compress_directory(path)?;
+            if size > MAX_FILE_SIZE {
+                let _ = fs::remove_file(&zip_path);
+                return Err(anyhow::anyhow!("Compressed file exceeds 100MB limit"));
+            }
+            Ok((zip_path.clone(), zip_name, Some(zip_path)))
+        }
+        _ => Err(anyhow::anyhow!(
+            "Please provide either a file path or -d <dir> or -m <message>"
+        )),
     }
+}
+
+fn request_file_upload(
+    client: &reqwest::blocking::Client,
+    server: &str,
+    filename: &str,
+) -> Result<(String, String)> {
+    let url = format!("{}/upload", server);
+    let response = client
+        .post(&url)
+        .header("x-upload-type", "file")
+        .header("x-filename", filename)
+        .send()
+        .context("Failed to request upload token")?;
+
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!(
+            "Request upload failed: {}",
+            response.status()
+        ));
+    }
+
+    let upload_resp: UploadResponse = response
+        .json()
+        .context("Failed to parse upload response")?;
+    let token = upload_resp
+        .upload_token
+        .context("Missing upload token")?;
+    let key = upload_resp.key.context("Missing upload key")?;
+    Ok((token, key))
+}
+
+#[derive(Serialize)]
+struct CompleteUploadRequest<'a> {
+    key: &'a str,
+    filename: &'a str,
+}
+
+fn complete_upload(
+    client: &reqwest::blocking::Client,
+    server: &str,
+    key: &str,
+    filename: &str,
+) -> Result<String> {
+    let url = format!("{}/upload/complete", server);
+    let response = client
+        .post(&url)
+        .json(&CompleteUploadRequest { key, filename })
+        .send()
+        .context("Failed to complete upload")?;
+
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!(
+            "Complete upload failed: {}",
+            response.status()
+        ));
+    }
+
+    let upload_resp: UploadResponse = response
+        .json()
+        .context("Failed to parse complete upload response")?;
+    Ok(upload_resp.id)
+}
+
+fn upload_to_qiniu(file_path: &Path, key: &str, token: &str) -> Result<()> {
+    let token_provider: StaticUploadTokenProvider = token
+        .parse()
+        .context("Failed to parse upload token")?;
+    let upload_manager = UploadManager::builder(UploadTokenSigner::new_upload_token_provider(
+        token_provider,
+    ))
+    .build();
+    let uploader: AutoUploader = upload_manager.auto_uploader();
+
+    let params = AutoUploaderObjectParams::builder()
+        .object_name(key)
+        .file_name(key)
+        .build();
+
+    uploader
+        .upload_path(file_path, params)
+        .context("Qiniu upload failed")?;
+    Ok(())
 }
 
 fn normalize_server(server: &str) -> String {

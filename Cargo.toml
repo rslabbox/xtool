@@ -32,6 +32,8 @@ zip = "7.2.0"
 tiny_http = "0.12"
 mime_guess = "2.0"
 urlencoding = "2.1"
+qiniu-upload-token = "0.2.4"
+qiniu-sdk = { version = "0.2.4", features = ["upload", "credential", "ureq"] }
 
 [dev-dependencies]
 serial_test = "3.2"

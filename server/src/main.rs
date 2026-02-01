@@ -2,29 +2,64 @@ mod app;
 mod handlers;
 mod state;
 mod storage;
+mod qiniu;
 
 use app::build_router;
-use log::info;
+use log::{info, error};
 use state::AppState;
 use storage::init_temp_dir;
-use std::env;
+use std::{env, fs::OpenOptions};
+use env_logger::Target;
+use qiniu::QiniuClient;
 
 #[tokio::main]
 async fn main() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     dotenvy::dotenv().ok();
+    let mut logger_builder = env_logger::Builder::from_env(
+        env_logger::Env::default().default_filter_or("info"),
+    );
+    if let Ok(log_file) = env::var("LOG_FILE") {
+        if !log_file.trim().is_empty() {
+            let file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(log_file)
+                .expect("Failed to open LOG_FILE");
+            logger_builder.target(Target::Pipe(Box::new(file)));
+        }
+    }
+    logger_builder.init();
 
     info!("Starting transfer server...");
 
     init_temp_dir().expect("Failed to initialize temp directory");
 
-    let state = AppState::new();
+    let mut state = AppState::new();
+
+    if let (Ok(ak), Ok(sk), Ok(domain), Ok(bucket)) = (
+        env::var("QINIU_ACCESS_KEY"),
+        env::var("QINIU_SECRET_KEY"),
+        env::var("QINIU_DOMAIN"),
+        env::var("QINIU_BUCKET"), // Changed from bucket_name to match likely env var
+    ) {
+        let scheme = env::var("QINIU_SCHEME").unwrap_or_else(|_| "http".to_string());
+        
+        info!("Qiniu configuration found. Bucket: {}", bucket);
+        state.qiniu_config = Some(QiniuClient::new(ak, sk, domain, scheme, bucket));
+    } else {
+        error!("Qiniu configuration missing (QINIU_ACCESS_KEY, QINIU_SECRET_KEY, QINIU_DOMAIN, QINIU_BUCKET)");
+        // Depending on requirements, maybe we should panic or just run in memory mode?
+        // User said "Upload to qiniu", so it is likely required.
+        // But for development maybe optional?
+        // The prompt implies "阅读 qiniu 的内容... 上传到 qiniu".
+    }
+
+    // Spawn background cleanup task
+    tokio::spawn(handlers::cleanup_expired_files_task(state.clone()));
+
     let app = build_router(state);
 
-    let port = env::var("PORT")
-        .ok()
-        .and_then(|value| value.parse::<u16>().ok())
-        .unwrap_or(8080);
+    let port = env::var("PORT").unwrap_or_else(|_| "3000".to_string());
     let addr = format!("0.0.0.0:{}", port);
     info!("Listening on {}", addr);
 

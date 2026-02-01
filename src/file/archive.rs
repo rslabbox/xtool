@@ -6,8 +6,7 @@ use std::{
 };
 use walkdir::WalkDir;
 
-pub const MAX_FILE_SIZE: u64 = 100 * 1024 * 1024;
-pub const ZIP_CONTENT_TYPE: &str = "application/zip";
+pub const MAX_FILE_SIZE: u64 = 1000 * 1024 * 1024;
 
 pub fn compress_directory(dir: &Path) -> Result<(PathBuf, String, u64)> {
     if !dir.exists() || !dir.is_dir() {
@@ -138,8 +137,4 @@ pub fn resolve_output_dir(output: Option<&Path>, filename: &str) -> Result<PathB
     } else {
         Ok(PathBuf::from(stem))
     }
-}
-
-pub fn is_zip_download(content_type: &str, filename: &str) -> bool {
-    content_type.eq_ignore_ascii_case(ZIP_CONTENT_TYPE) || filename.ends_with(".zip")
 }

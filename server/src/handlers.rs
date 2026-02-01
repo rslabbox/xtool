@@ -1,34 +1,43 @@
 use axum::{
-    body::{Body, Bytes},
+    body::Bytes,
     extract::{Path, State},
-    http::{header, HeaderMap, StatusCode},
-    response::Response,
+    http::{HeaderMap, StatusCode},
+    response::{Response, IntoResponse},
     Json,
 };
 use log::{error, info};
 use rand::Rng;
 use std::{
-    fs,
-    path::PathBuf,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tokio::io::AsyncWriteExt;
-use tokio_util::io::ReaderStream;
 
 use crate::{
     state::AppState,
-    storage::{FileRecord, TEMP_DIR},
+    storage::{FileRecord, StorageType, ContentType},
 };
 
-const MAX_FILE_SIZE: usize = 100 * 1024 * 1024;
-const DEFAULT_DOWNLOADS: u8 = 1;
-const MAX_DOWNLOADS: u8 = 10;
+const MAX_TEXT_SIZE: usize = 10 * 1024 * 1024; // 10MB for text
 const MAX_FILE_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 
 #[derive(serde::Serialize)]
 pub struct UploadResponse {
-    pub token: String,
-    pub filename: String,
+    pub id: String,
+    pub filename: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upload_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upload_url: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+pub struct DownloadResponse {
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    pub filename: Option<String>,
+    pub content_type: ContentType,
 }
 
 #[derive(serde::Serialize)]
@@ -45,229 +54,240 @@ pub async fn upload_file(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<UploadResponse>, StatusCode> {
-    if body.len() > MAX_FILE_SIZE {
-        return Err(StatusCode::PAYLOAD_TOO_LARGE);
+    let upload_type = headers
+        .get("x-upload-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("file"); // default to file
+
+    let id = generate_token();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    if upload_type == "text" {
+        if body.len() > MAX_TEXT_SIZE {
+            return Err(StatusCode::PAYLOAD_TOO_LARGE);
+        }
+        let content = String::from_utf8(body.to_vec()).map_err(|_| StatusCode::BAD_REQUEST)?;
+        
+        let mut files = state.files.lock().expect("State lock poisoned");
+        files.insert(id.clone(), FileRecord {
+            id: id.clone(),
+            filename: None,
+            content_type: ContentType::Text,
+            storage: StorageType::Memory(content),
+            uploaded_at: now,
+        });
+        
+        info!("Text uploaded: id: {}", id);
+        return Ok(Json(UploadResponse {
+            id,
+            filename: None,
+            upload_token: None,
+            key: None,
+            upload_url: None,
+        }));
+    } else {
+        // File upload - Qiniu
+        let filename = headers
+            .get("x-filename")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("unnamed_file");
+
+        let qiniu = state.qiniu_config.as_ref().ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+        
+        // key now includes filename to help Qiniu console management, but mostly rely on client downloading with correct name
+        // actually Qiniu key should probably be unique.
+        let key = format!("xtool_{}_{}", id, now);
+        let token_lifetime = Duration::from_secs(3600);
+        
+        let upload_token = qiniu.generate_upload_token(&key, token_lifetime)
+            .map_err(|e| {
+                error!("Failed to generate qiniu token: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+            
+        // We do NOT insert into state.files yet. Client must confirm upload.
+        // We return empty id to signify "not ready" or client ignores ID for file upload start?
+        // Current client expects ID. We can generate a temporary ID, or just use "pending" and client ignores it?
+        // Actually, let's keep the ID generation part but we don't save the record.
+        // The client will initiate "complete_upload" with key + filename later.
+        
+        info!("File upload prepared: {} (key: {})", filename, key);
+        
+        return Ok(Json(UploadResponse {
+            id: "".to_string(), // Client shouldn't use this ID for download yet
+            filename: Some(filename.to_string()),
+            upload_token: Some(upload_token),
+            key: Some(key),
+            upload_url: None,
+        }));
     }
+}
 
-    cleanup_expired_files(&state);
+#[derive(serde::Deserialize)]
+pub struct CompleteUploadRequest {
+    pub key: String,
+    pub filename: String,
+}
 
-    let content_type_value = headers
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or("application/octet-stream")
-        .to_string();
-    let requested_name = headers
-        .get("x-filename")
-        .and_then(|value| value.to_str().ok())
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty())
-        .unwrap_or("file.bin");
-    let download_limit = match parse_download_limit(&headers) {
-        Ok(value) => value,
-        Err(status) => return Err(status),
-    };
-    let (token, filename, file_path) =
-        reserve_token(&state, content_type_value, requested_name.to_string(), download_limit);
+pub async fn complete_upload(
+    State(state): State<AppState>,
+    Json(payload): Json<CompleteUploadRequest>,
+) -> Result<Json<UploadResponse>, StatusCode> {
+    let qiniu = state.qiniu_config.as_ref().ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    // 1. Set Lifecycle
+    qiniu.set_object_lifecycle(&payload.key, 1) // 1 day expiration
+        .map_err(|e| {
+            error!("Failed to set lifecycle: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
-    if let Err(err) = write_file(&file_path, &body).await {
-        release_token(&state, &token);
-        error!("Failed to write file: {}", err);
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    }
+    // 2. Generate ID and Store Record
+    // We reuse the generate_token function but it generates 6 digits.
+    let id = generate_token();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
 
-    info!("File uploaded: {} (token: {})", filename, token);
+    let mut files = state.files.lock().expect("State lock poisoned");
+    files.insert(id.clone(), FileRecord {
+        id: id.clone(),
+        filename: Some(payload.filename.clone()),
+        content_type: ContentType::File,
+        storage: StorageType::Qiniu(payload.key.clone()),
+        uploaded_at: now,
+    });
 
-    Ok(Json(UploadResponse { token, filename }))
+    info!("File upload completed and registered: {} (id: {})", payload.filename, id);
+
+    Ok(Json(UploadResponse {
+        id,
+        filename: Some(payload.filename),
+        upload_token: None,
+        key: Some(payload.key),
+        upload_url: None,
+    }))
 }
 
 pub async fn download_file(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Response, StatusCode> {
-    let (record, delete_after) = {
-        let mut files = state.files.lock().expect("State lock poisoned");
-        let record = match files.get_mut(&id) {
-            Some(info) => info,
-            None => {
-                info!("File not found for token: {}", id);
-                return Err(StatusCode::NOT_FOUND);
-            }
-        };
+    let mut files = state.files.lock().expect("State lock poisoned");
+    
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
 
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        if now.saturating_sub(record.uploaded_at) >= MAX_FILE_AGE.as_secs() {
-            info!("File expired for token: {}", id);
+    if let Some(record) = files.get(&id) {
+        if now.saturating_sub(record.uploaded_at) > MAX_FILE_AGE.as_secs() {
+            info!("File expired: {}", id);
             files.remove(&id);
-            return Err(StatusCode::GONE);
-        }
-
-        if record.remaining_downloads == 0 {
-            info!("Download limit reached for token: {}", id);
-            return Err(StatusCode::GONE);
-        }
-
-        record.remaining_downloads = record.remaining_downloads.saturating_sub(1);
-        let delete_after = record.remaining_downloads == 0;
-        let cloned = record.clone();
-
-        if delete_after {
-            files.remove(&id);
-        }
-
-        (cloned, delete_after)
-    };
-
-    let file = match tokio::fs::File::open(&record.path).await {
-        Ok(file) => file,
-        Err(err) => {
-            error!("Failed to open file: {}", err);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
-    };
-
-    if delete_after {
-        if let Err(err) = fs::remove_file(&record.path) {
-            error!("Failed to delete file after download: {}", err);
+            return Err(StatusCode::NOT_FOUND); 
         }
     }
 
-    let stream = ReaderStream::new(file);
-    let body = Body::from_stream(stream);
+    let record = files.get(&id).cloned().ok_or(StatusCode::NOT_FOUND)?;
+    
+    // Unlock early
+    drop(files);
 
-    info!("File downloaded: {} (token: {})", record.filename, id);
-
-    let download_name = if record.filename.trim().is_empty() {
-        "file.bin"
-    } else {
-        record.filename.as_str()
-    };
-
-    Ok(Response::builder()
-        .header(
-            header::CONTENT_DISPOSITION,
-            format!("attachment; filename=\"{}\"", download_name),
-        )
-        .header(header::CONTENT_TYPE, record.content_type)
-        .body(body)
-        .expect("Failed to build response"))
+    match &record.storage {
+        StorageType::Memory(content) => {
+            let resp = DownloadResponse {
+                url: None,
+                content: Some(content.clone()),
+                filename: None,
+                content_type: record.content_type.clone(),
+            };
+            Ok(Json(resp).into_response())
+        }
+        StorageType::Qiniu(key) => {
+             let qiniu = state.qiniu_config.as_ref().ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+             let url = qiniu.get_download_url(key);
+             
+             let resp = DownloadResponse {
+                url: Some(url),
+                content: None,
+                filename: record.filename.clone(),
+                content_type: record.content_type.clone(),
+            };
+            Ok(Json(resp).into_response())
+        }
+    }
 }
 
 pub async fn list_files(State(state): State<AppState>) -> Json<ListResponse> {
     let files = state.files.lock().expect("State lock poisoned");
-    let list: Vec<FileRecord> = files.values().cloned().collect();
-
-    Json(ListResponse { files: list })
+    let file_list: Vec<FileRecord> = files.values().cloned().collect();
+    Json(ListResponse { files: file_list })
 }
 
 pub async fn delete_file(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
-    let record = {
-        let mut files = state.files.lock().expect("State lock poisoned");
-        match files.remove(&id) {
-            Some(info) => info,
-            None => {
-                info!("File not found for token: {}", id);
-                return Err(StatusCode::NOT_FOUND);
-            }
-        }
-    };
-
-    if let Err(err) = fs::remove_file(&record.path) {
-        error!("Failed to delete file: {}", err);
-    }
-
-    info!("File deleted: {} (token: {})", record.filename, id);
-
-    Ok(StatusCode::NO_CONTENT)
-}
-
-fn reserve_token(
-    state: &AppState,
-    content_type: String,
-    original_name: String,
-    remaining_downloads: u8,
-) -> (String, String, PathBuf) {
-    let uploaded_at = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    let mut rng = rand::rng();
-    loop {
-        let candidate = format!("{:06}", rng.random_range(0..=999_999));
-        let storage_name = format!("file_{}", candidate);
-        let file_path = PathBuf::from(TEMP_DIR).join(&storage_name);
-        let record = FileRecord {
-            id: candidate.clone(),
-            filename: original_name.clone(),
-            content_type: content_type.clone(),
-            remaining_downloads,
-            uploaded_at,
-            path: file_path.clone(),
-        };
-        let mut files = state.files.lock().expect("State lock poisoned");
-        if !files.contains_key(&candidate) {
-            files.insert(candidate.clone(), record);
-            return (candidate, original_name, file_path);
-        }
-    }
-}
-
-fn release_token(state: &AppState, token: &str) {
     let mut files = state.files.lock().expect("State lock poisoned");
-    files.remove(token);
-}
-
-async fn write_file(path: &PathBuf, body: &Bytes) -> Result<(), std::io::Error> {
-    let mut file = tokio::fs::File::create(path).await?;
-    file.write_all(body).await
-}
-
-fn parse_download_limit(headers: &HeaderMap) -> Result<u8, StatusCode> {
-    match headers.get("x-download-limit") {
-        None => Ok(DEFAULT_DOWNLOADS),
-        Some(value) => {
-            let parsed = value
-                .to_str()
-                .ok()
-                .and_then(|text| text.parse::<u8>().ok())
-                .unwrap_or(0);
-            if parsed == 0 || parsed > MAX_DOWNLOADS {
-                Err(StatusCode::BAD_REQUEST)
-            } else {
-                Ok(parsed)
-            }
-        }
+    if files.remove(&id).is_some() {
+        info!("File deleted: {}", id);
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(StatusCode::NOT_FOUND)
     }
 }
 
-fn cleanup_expired_files(state: &AppState) {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    let mut expired: Vec<(String, PathBuf)> = Vec::new();
+fn generate_token() -> String {
+    let mut rng = rand::rng();
+    let token: u32 = rng.random_range(100000..999999);
+    token.to_string()
+}
 
-    {
-        let mut files = state.files.lock().expect("State lock poisoned");
-        files.retain(|token, record| {
-            let is_expired = now.saturating_sub(record.uploaded_at) >= MAX_FILE_AGE.as_secs();
-            if is_expired {
-                expired.push((token.clone(), record.path.clone()));
-            }
-            !is_expired
-        });
-    }
+pub async fn cleanup_expired_files_task(state: AppState) {
+    // Check every hour
+    let mut interval = tokio::time::interval(Duration::from_secs(3600)); 
+    
+    // First tick completes immediately, so we might want to skip it or just let it run once at startup
+    interval.tick().await;
 
-    for (token, path) in expired {
-        if let Err(err) = fs::remove_file(&path) {
-            error!("Failed to delete expired file {}: {}", path.display(), err);
-        } else {
-            info!("Deleted expired file: {} (token: {})", path.display(), token);
+    loop {
+        interval.tick().await;
+        info!("Running cleanup task...");
+        
+        // Use a block to ensure lock is dropped quickly
+        let removed_count = {
+            let mut files = match state.files.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    error!("State lock poisoned during cleanup");
+                    poisoned.into_inner()
+                }
+            };
+
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            
+            let initial_count = files.len();
+            files.retain(|id, record| {
+                let age = now.saturating_sub(record.uploaded_at);
+                if age > MAX_FILE_AGE.as_secs() {
+                    info!("Cleanup removing expired file: {} (age: {}s)", id, age);
+                    false
+                } else {
+                    true
+                }
+            });
+            initial_count - files.len()
+        };
+        
+        if removed_count > 0 {
+            info!("Cleanup task removed {} expired file(s)", removed_count);
         }
     }
 }

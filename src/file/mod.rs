@@ -7,8 +7,7 @@ mod archive;
 mod download;
 mod upload;
 
-const DEFAULT_SERVER_URL: &str = "http://8.130.17.158:8080";
-pub const MESSAGE_CONTENT_TYPE: &str = "application/x-xtool-message";
+const DEFAULT_SERVER_URL: &str = "http://a.debin.cc:8080";
 
 #[derive(Subcommand)]
 pub enum FileAction {
@@ -51,10 +50,27 @@ pub enum FileAction {
     },
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
 struct UploadResponse {
-    token: String,
-    filename: String,
+    id: String,
+    filename: Option<String>,
+    upload_token: Option<String>,
+    key: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Clone, Copy)]
+enum ContentType {
+    Text,
+    File,
+}
+
+#[derive(Deserialize, Debug)]
+struct DownloadResponse {
+    url: Option<String>,
+    content: Option<String>,
+    filename: Option<String>,
+    content_type: ContentType,
 }
 
 pub fn run(action: FileAction) -> Result<()> {

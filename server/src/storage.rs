@@ -5,13 +5,34 @@ use std::{fs, io, path::PathBuf};
 pub const TEMP_DIR: &str = "temp";
 
 #[derive(Clone, Serialize, Deserialize)]
+pub enum StorageType {
+    Qiniu(String), // key
+    Memory(String), // content
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub enum ContentType {
+    Text,
+    File,
+}
+
+impl ContentType {
+#[allow(dead_code)]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ContentType::Text => "text/plain",
+            ContentType::File => "application/zip",
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct FileRecord {
     pub id: String,
-    pub filename: String,
-    pub content_type: String,
-    pub remaining_downloads: u8,
+    pub filename: Option<String>,
+    pub content_type: ContentType,
+    pub storage: StorageType,
     pub uploaded_at: u64,
-    pub path: PathBuf,
 }
 
 pub fn init_temp_dir() -> io::Result<()> {
