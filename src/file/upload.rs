@@ -8,6 +8,12 @@ use serde::Serialize;
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    thread,
+    time::{Duration, Instant},
 };
 
 pub fn send_file(
@@ -83,10 +89,15 @@ fn resolve_upload_target(
             Ok((path.to_path_buf(), filename, None))
         }
         (None, Some(path)) => {
+            eprintln!("Compressing directory: {}", path.display());
             let (zip_path, zip_name, size) = compress_directory(path)?;
             if size > MAX_FILE_SIZE {
                 let _ = fs::remove_file(&zip_path);
-                return Err(anyhow::anyhow!("Compressed file exceeds {}MB limit", MAX_FILE_SIZE / 1024 / 1024));
+                return Err(anyhow::anyhow!(
+                    "Compressed file exceeds {}MB limit (current: {:.2}MB)",
+                    MAX_FILE_SIZE / 1024 / 1024,
+                    size as f64 / 1024.0 / 1024.0
+                ));
             }
             Ok((zip_path.clone(), zip_name, Some(zip_path)))
         }
@@ -159,6 +170,18 @@ fn complete_upload(
 }
 
 fn upload_to_qiniu(file_path: &Path, key: &str, token: &str) -> Result<()> {
+    let running = Arc::new(AtomicBool::new(true));
+    let timer_flag = Arc::clone(&running);
+    let start = Instant::now();
+    let timer_handle = thread::spawn(move || {
+        let mut seconds = 0u64;
+        while timer_flag.load(Ordering::Relaxed) {
+            thread::sleep(Duration::from_secs(1));
+            seconds += 1;
+            eprintln!("Uploading... elapsed {}s", seconds);
+        }
+    });
+
     let token_provider: StaticUploadTokenProvider = token
         .parse()
         .context("Failed to parse upload token")?;
@@ -176,6 +199,10 @@ fn upload_to_qiniu(file_path: &Path, key: &str, token: &str) -> Result<()> {
     uploader
         .upload_path(file_path, params)
         .context("Qiniu upload failed")?;
+
+    running.store(false, Ordering::Relaxed);
+    let _ = timer_handle.join();
+    eprintln!("Upload finished in {:.2}s", start.elapsed().as_secs_f64());
     Ok(())
 }
 
