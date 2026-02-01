@@ -28,7 +28,7 @@ pub fn send_file(
         }
         let data = trimmed.as_bytes().to_vec();
         if data.len() as u64 > MAX_FILE_SIZE {
-            return Err(anyhow::anyhow!("Message exceeds 100MB limit"));
+            return Err(anyhow::anyhow!("Message exceeds {}MB limit", MAX_FILE_SIZE / 1024 / 1024));
         }
         let url = format!("{}/upload", server);
         let response = client
@@ -73,7 +73,7 @@ fn resolve_upload_target(
             let metadata = fs::metadata(path)
                 .with_context(|| format!("Failed to read file: {}", path.display()))?;
             if metadata.len() > MAX_FILE_SIZE {
-                return Err(anyhow::anyhow!("File exceeds 100MB limit"));
+                return Err(anyhow::anyhow!("File exceeds {}MB limit", MAX_FILE_SIZE / 1024 / 1024));
             }
             let filename = path
                 .file_name()
@@ -86,7 +86,7 @@ fn resolve_upload_target(
             let (zip_path, zip_name, size) = compress_directory(path)?;
             if size > MAX_FILE_SIZE {
                 let _ = fs::remove_file(&zip_path);
-                return Err(anyhow::anyhow!("Compressed file exceeds 100MB limit"));
+                return Err(anyhow::anyhow!("Compressed file exceeds {}MB limit", MAX_FILE_SIZE / 1024 / 1024));
             }
             Ok((zip_path.clone(), zip_name, Some(zip_path)))
         }

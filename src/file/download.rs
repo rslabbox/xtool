@@ -29,7 +29,7 @@ pub fn get_file(server: &str, token: &str, output: Option<&Path>) -> Result<()> 
                 .content
                 .context("No content in response (is this a file?)")?;
             if content.len() as u64 > MAX_FILE_SIZE {
-                return Err(anyhow::anyhow!("Message exceeds 100MB limit"));
+                return Err(anyhow::anyhow!("Message exceeds {}MB limit", MAX_FILE_SIZE / 1024 / 1024));
             }
             println!("{}", content);
         }
@@ -57,7 +57,7 @@ pub fn get_file(server: &str, token: &str, output: Option<&Path>) -> Result<()> 
                 .bytes()
                 .context("Failed to read file response")?;
             if bytes.len() as u64 > MAX_FILE_SIZE {
-                return Err(anyhow::anyhow!("File exceeds 100MB limit"));
+                return Err(anyhow::anyhow!("File exceeds {}MB limit", MAX_FILE_SIZE / 1024 / 1024));
             }
 
             if filename.ends_with(".zip") {
