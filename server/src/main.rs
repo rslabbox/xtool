@@ -43,15 +43,16 @@ async fn main() {
         env::var("QINIU_BUCKET"), // Changed from bucket_name to match likely env var
     ) {
         let scheme = env::var("QINIU_SCHEME").unwrap_or_else(|_| "http".to_string());
+        let callback_url = env::var("QINIU_CALLBACK_URL")
+            .unwrap_or_else(|_| "http://a.debin.cc:8080/upload/callback".to_string());
         
         info!("Qiniu configuration found. Bucket: {}", bucket);
-        state.qiniu_config = Some(QiniuClient::new(ak, sk, domain, scheme, bucket));
+        state.qiniu_config = Some(QiniuClient::new(ak, sk, domain, scheme, bucket, callback_url));
     } else {
         error!("Qiniu configuration missing (QINIU_ACCESS_KEY, QINIU_SECRET_KEY, QINIU_DOMAIN, QINIU_BUCKET)");
         // Depending on requirements, maybe we should panic or just run in memory mode?
         // User said "Upload to qiniu", so it is likely required.
         // But for development maybe optional?
-        // The prompt implies "阅读 qiniu 的内容... 上传到 qiniu".
     }
 
     // Spawn background cleanup task

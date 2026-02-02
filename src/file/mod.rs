@@ -56,7 +56,6 @@ struct UploadResponse {
     id: String,
     filename: Option<String>,
     upload_token: Option<String>,
-    key: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, Copy)]

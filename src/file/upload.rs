@@ -4,7 +4,6 @@ use anyhow::{Context, Result};
 use log::info;
 use qiniu_sdk::upload::{AutoUploader, AutoUploaderObjectParams, UploadManager, UploadTokenSigner};
 use qiniu_upload_token::StaticUploadTokenProvider;
-use serde::Serialize;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -57,9 +56,8 @@ pub fn send_file(
     }
 
     let (file_path, filename, temp_path) = resolve_upload_target(filepath, dirpath)?;
-    let (upload_token, key) = request_file_upload(&client, &server, &filename)?;
-    upload_to_qiniu(&file_path, &key, &upload_token)?;
-    let id = complete_upload(&client, &server, &key, &filename)?;
+    let (upload_token, id) = request_file_upload(&client, &server, &filename)?;
+    upload_to_qiniu(&file_path, &filename, &upload_token)?;
 
     if let Some(path) = temp_path {
         let _ = fs::remove_file(path);
@@ -133,43 +131,10 @@ fn request_file_upload(
     let token = upload_resp
         .upload_token
         .context("Missing upload token")?;
-    let key = upload_resp.key.context("Missing upload key")?;
-    Ok((token, key))
+    Ok((token, upload_resp.id))
 }
 
-#[derive(Serialize)]
-struct CompleteUploadRequest<'a> {
-    key: &'a str,
-    filename: &'a str,
-}
-
-fn complete_upload(
-    client: &reqwest::blocking::Client,
-    server: &str,
-    key: &str,
-    filename: &str,
-) -> Result<String> {
-    let url = format!("{}/upload/complete", server);
-    let response = client
-        .post(&url)
-        .json(&CompleteUploadRequest { key, filename })
-        .send()
-        .context("Failed to complete upload")?;
-
-    if !response.status().is_success() {
-        return Err(anyhow::anyhow!(
-            "Complete upload failed: {}",
-            response.status()
-        ));
-    }
-
-    let upload_resp: UploadResponse = response
-        .json()
-        .context("Failed to parse complete upload response")?;
-    Ok(upload_resp.id)
-}
-
-fn upload_to_qiniu(file_path: &Path, key: &str, token: &str) -> Result<()> {
+fn upload_to_qiniu(file_path: &Path, filename: &str, token: &str) -> Result<()> {
     let running = Arc::new(AtomicBool::new(true));
     let timer_flag = Arc::clone(&running);
     let start = Instant::now();
@@ -192,8 +157,7 @@ fn upload_to_qiniu(file_path: &Path, key: &str, token: &str) -> Result<()> {
     let uploader: AutoUploader = upload_manager.auto_uploader();
 
     let params = AutoUploaderObjectParams::builder()
-        .object_name(key)
-        .file_name(key)
+        .file_name(filename)
         .build();
 
     uploader
