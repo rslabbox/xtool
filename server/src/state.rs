@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{storage::FileRecord, qiniu::QiniuClient};
+use crate::{records::FileRecord, qiniu::QiniuClient};
 
 #[derive(Clone)]
 pub struct AppState {

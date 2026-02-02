@@ -1,13 +1,12 @@
 mod app;
 mod handlers;
 mod state;
-mod storage;
+mod records;
 mod qiniu;
 
 use app::build_router;
 use log::{info, error};
 use state::AppState;
-use storage::init_temp_dir;
 use std::{env, fs::OpenOptions};
 use env_logger::Target;
 use qiniu::QiniuClient;
@@ -31,8 +30,6 @@ async fn main() {
     logger_builder.init();
 
     info!("Starting transfer server...");
-
-    init_temp_dir().expect("Failed to initialize temp directory");
 
     let mut state = AppState::new();
 

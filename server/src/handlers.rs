@@ -13,7 +13,7 @@ use std::{
 
 use crate::{
     state::AppState,
-    storage::{FileRecord, StorageType, ContentType},
+    records::{ContentType, FileRecord, StorageType},
 };
 
 const MAX_TEXT_SIZE: usize = 10 * 1024 * 1024; // 10MB for text
