@@ -10,6 +10,7 @@ pub struct QiniuClient {
     pub scheme: String,
     pub bucket_name: String,
     pub callback_url: String,
+    pub max_upload_size_bytes: u64,
 }
 
 impl QiniuClient {
@@ -20,6 +21,7 @@ impl QiniuClient {
         scheme: impl Into<String>,
         bucket_name: impl Into<String>,
         callback_url: impl Into<String>,
+        max_upload_size_bytes: u64,
     ) -> Self {
         Self {
             access_key: access_key.into(),
@@ -28,6 +30,7 @@ impl QiniuClient {
             scheme: scheme.into(),
             bucket_name: bucket_name.into(),
             callback_url: callback_url.into(),
+            max_upload_size_bytes,
         }
     }
 
@@ -37,13 +40,17 @@ impl QiniuClient {
             .insert_only()
             .object_lifetime(Duration::from_secs(24 * 60 * 60))
             .save_as(save_as_name, true)
-            .callback([
-                self.callback_url.as_str(),
-            ], "", callback_body, "application/x-www-form-urlencoded")
-            .build();
+            .file_size_limitation(..=self.max_upload_size_bytes)
+            .callback(
+                [self.callback_url.as_str()],
+                "",
+                callback_body,
+                "application/x-www-form-urlencoded",
+            ).build();
 
         let credential = TokenCredential::new(&self.access_key, &self.secret_key);
-        let provider = upload_policy.into_static_upload_token_provider(credential, Default::default());
+        let provider =
+            upload_policy.into_static_upload_token_provider(credential, Default::default());
         let token = provider
             .to_token_string(Default::default())
             .context("Failed to generate upload token")?;

@@ -42,9 +42,24 @@ async fn main() {
         let scheme = env::var("QINIU_SCHEME").unwrap_or_else(|_| "http".to_string());
         let callback_url = env::var("QINIU_CALLBACK_URL")
             .unwrap_or_else(|_| "http://a.debin.cc:8080/upload/callback".to_string());
+        let max_upload_size_bytes = env::var("QINIU_UPLOAD_MAX_SIZE_MB")
+            .unwrap_or_else(|_| "100".to_string())
+            .trim()
+            .parse::<u64>()
+            .unwrap_or(100)
+            * 1024
+            * 1024;
         
         info!("Qiniu configuration found. Bucket: {}", bucket);
-        state.qiniu_config = Some(QiniuClient::new(ak, sk, domain, scheme, bucket, callback_url));
+        state.qiniu_config = Some(QiniuClient::new(
+            ak,
+            sk,
+            domain,
+            scheme,
+            bucket,
+            callback_url,
+            max_upload_size_bytes,
+        ));
     } else {
         error!("Qiniu configuration missing (QINIU_ACCESS_KEY, QINIU_SECRET_KEY, QINIU_DOMAIN, QINIU_BUCKET)");
         // Depending on requirements, maybe we should panic or just run in memory mode?
