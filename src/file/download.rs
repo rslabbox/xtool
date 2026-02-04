@@ -1,8 +1,9 @@
 use crate::file::archive::{resolve_output_dir, resolve_output_path, unzip_to_dir, write_temp_zip, MAX_FILE_SIZE};
 use crate::file::{ContentType, DownloadResponse};
 use anyhow::{Context, Result};
+use indicatif::{ProgressBar, ProgressStyle};
 use log::info;
-use std::{fs, path::Path};
+use std::{fs, io::Read, path::Path};
 
 pub fn get_file(server: &str, token: &str, output: Option<&Path>) -> Result<()> {
     let client = reqwest::blocking::Client::new();
@@ -41,7 +42,7 @@ pub fn get_file(server: &str, token: &str, output: Option<&Path>) -> Result<()> 
                 .filename
                 .unwrap_or_else(|| "file.bin".to_string());
 
-            let file_response = client
+            let mut file_response = client
                 .get(&file_url)
                 .send()
                 .context("Failed to download file from storage")?;
@@ -53,12 +54,56 @@ pub fn get_file(server: &str, token: &str, output: Option<&Path>) -> Result<()> 
                 ));
             }
 
-            let bytes = file_response
-                .bytes()
-                .context("Failed to read file response")?;
-            if bytes.len() as u64 > MAX_FILE_SIZE {
-                return Err(anyhow::anyhow!("File exceeds {}MB limit", MAX_FILE_SIZE / 1024 / 1024));
+            let total_size = file_response.content_length();
+            let mut bytes: Vec<u8> = Vec::new();
+            let mut downloaded: u64 = 0;
+
+            let progress = match total_size {
+                Some(total) if total > 0 => {
+                    let pb = ProgressBar::new(total);
+                    let style = ProgressStyle::with_template(
+                        "{msg} {spinner:.green} {bytes}/{total_bytes} ({percent}%) [{bar:40.cyan/blue}] {eta}",
+                    )
+                    .unwrap()
+                    .progress_chars("=>-");
+                    pb.set_style(style);
+                    pb.set_message(filename.clone());
+                    pb
+                }
+                _ => {
+                    let pb = ProgressBar::new_spinner();
+                    pb.set_style(
+                        ProgressStyle::with_template("{msg} {spinner:.green} {bytes} downloaded")
+                            .unwrap(),
+                    );
+                    pb.set_message(filename.clone());
+                    pb.enable_steady_tick(std::time::Duration::from_millis(120));
+                    pb
+                }
+            };
+
+            let mut buffer = [0u8; 64 * 1024];
+            loop {
+                let read = file_response
+                    .read(&mut buffer)
+                    .context("Failed to read file response")?;
+                if read == 0 {
+                    break;
+                }
+                bytes.extend_from_slice(&buffer[..read]);
+                downloaded += read as u64;
+                progress.inc(read as u64);
+
+                if downloaded > MAX_FILE_SIZE {
+                    progress.finish_and_clear();
+                    return Err(anyhow::anyhow!(
+                        "File exceeds {}MB limit",
+                        MAX_FILE_SIZE / 1024 / 1024
+                    ));
+                }
             }
+
+            progress.finish_and_clear();
 
             if filename.ends_with(".zip") {
                 let temp_path = write_temp_zip(&bytes)?;
@@ -79,7 +124,11 @@ pub fn get_file(server: &str, token: &str, output: Option<&Path>) -> Result<()> 
                 fs::write(&output_path, &bytes)
                     .with_context(|| format!("Failed to write file: {}", output_path.display()))?;
 
-                info!("Download success: {} ({} bytes)", output_path.display(), bytes.len());
+                info!(
+                    "Download success: {} ({} bytes)",
+                    output_path.display(),
+                    bytes.len()
+                );
             }
         }
     }
