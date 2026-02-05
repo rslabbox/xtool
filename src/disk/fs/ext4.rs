@@ -7,6 +7,8 @@ use rsext4::{
     loopfile::{get_file_inode, resolve_inode_block_allextend},
     mkfs, Ext4FileSystem, Jbd2Dev, BLOCK_SIZE,
 };
+// use rsext4::inode::Ext4Inode;
+use rsext4::disknode::Ext4Inode;
 
 use super::super::io::PartitionBlockDev;
 use super::super::types::{DirEntry, PartitionTarget};
@@ -76,17 +78,9 @@ pub fn with_ext4<R>(
     Ok(result)
 }
 
-impl FsOps for Ext4Ops<'_> {
-    fn list_dir(&mut self, path: &str) -> Result<Vec<DirEntry>> {
-        let (_, inode) = get_file_inode(self.fs, self.jbd, path)
-            .map_err(|e| anyhow!("lookup failed: {e:?}"))?
-            .ok_or_else(|| anyhow!("path not found"))?;
-        if !inode.is_dir() {
-            bail!("not a directory");
-        }
-
-        let mut inode = inode;
-        let blocks = resolve_inode_block_allextend(self.fs, self.jbd, &mut inode)
+impl<'a> Ext4Ops<'a> {
+    fn get_dir_entries(&mut self, inode: &mut Ext4Inode) -> Result<Vec<(u32, String, bool)>> {
+        let blocks = resolve_inode_block_allextend(self.fs, self.jbd, inode)
             .map_err(|e| anyhow!("resolve dir blocks failed: {e:?}"))?;
 
         let mut entries = Vec::new();
@@ -104,6 +98,9 @@ impl FsOps for Ext4Ops<'_> {
                     if entry.is_dot() || entry.is_dotdot() {
                         continue;
                     }
+                    if entry.inode == 0 {
+                          continue;
+                    }
                     let name = entry
                         .name_str()
                         .map(|s| s.to_string())
@@ -117,20 +114,83 @@ impl FsOps for Ext4Ops<'_> {
                     .fs
                     .get_inode_by_num(self.jbd, inode_num)
                     .map_err(|e| anyhow!("inode read failed: {e:?}"))?;
-                entries.push(DirEntry {
-                    name,
-                    is_dir: child_inode.is_dir(),
-                });
+                entries.push((inode_num, name, child_inode.is_dir()));
             }
         }
-        entries.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(entries)
     }
 
+    fn resolve_path(&mut self, path: &str) -> Result<Ext4Inode> {
+         if path == "/" {
+             let (_, root) = get_file_inode(self.fs, self.jbd, "/")
+                 .map_err(|e| anyhow!("root lookup failed: {e:?}"))?
+                 .ok_or_else(|| anyhow!("root not found"))?;
+             return Ok(root);
+         }
+
+         let mut current_inode = {
+             let (_, root) = get_file_inode(self.fs, self.jbd, "/")
+                 .map_err(|e| anyhow!("root lookup failed: {e:?}"))?
+                 .ok_or_else(|| anyhow!("root not found"))?;
+             root
+         };
+
+         let normalized = normalize_image_path(path);
+         let parts: Vec<&str> = normalized.split('/').filter(|s| !s.is_empty()).collect();
+
+         for part in parts {
+             if !current_inode.is_dir() {
+                 bail!("not a directory");
+             }
+             
+             let entries = self.get_dir_entries(&mut current_inode)?;
+             let mut found_inode_num = None;
+             
+             for (inum, name, _) in entries {
+                 if name == part {
+                     found_inode_num = Some(inum);
+                     break;
+                 }
+             }
+             
+             match found_inode_num {
+                 Some(num) => {
+                     current_inode = self
+                    .fs
+                    .get_inode_by_num(self.jbd, num)
+                    .map_err(|e| anyhow!("inode read failed: {e:?}"))?;
+                 }
+                 None => bail!("path not found: {}", path),
+             }
+         }
+         Ok(current_inode)
+    }
+}
+
+impl FsOps for Ext4Ops<'_> {
+    fn list_dir(&mut self, path: &str) -> Result<Vec<DirEntry>> {
+        let mut inode = self.resolve_path(path)?;
+
+        if !inode.is_dir() {
+            bail!("not a directory");
+        }
+
+        let entries = self.get_dir_entries(&mut inode)?;
+        let mut res = Vec::new();
+        for (_, name, is_dir) in entries {
+            res.push(DirEntry { name, is_dir });
+        }
+        res.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(res)
+    }
+
     fn read_file(&mut self, path: &str, offset: u64, bytes: Option<usize>) -> Result<Vec<u8>> {
+        // Verify file existence via manual resolution first
+        let _ = self.resolve_path(path)?;
+        
         let data = read_file(self.jbd, self.fs, path)
             .map_err(|e| anyhow!("read failed: {e:?}"))?
-            .ok_or_else(|| anyhow!("file not found"))?;
+            .ok_or_else(|| anyhow!("file not found (read)"))?;
 
         let start = offset as usize;
         if start >= data.len() {
@@ -141,9 +201,11 @@ impl FsOps for Ext4Ops<'_> {
     }
 
     fn write_file(&mut self, path: &str, data: &[u8], force: bool) -> Result<()> {
-        let exists = get_file_inode(self.fs, self.jbd, path)
-            .map_err(|e| anyhow!("lookup failed: {e:?}"))?
-            .is_some();
+        let exists = match self.resolve_path(path) {
+            Ok(_) => true,
+            Err(_) => false, // Assume not found if resolve failed
+        };
+        
         if exists {
             if !force {
                 bail!("destination exists, use -f to overwrite");
@@ -151,7 +213,7 @@ impl FsOps for Ext4Ops<'_> {
             truncate(self.jbd, self.fs, path, 0).map_err(|e| anyhow!("truncate failed: {e:?}"))?;
         } else {
             rsext4::mkfile(self.jbd, self.fs, path, None, None)
-                .ok_or_else(|| anyhow!("mkfile failed"))?;
+                .ok_or_else(|| anyhow!("mkfile failed for path: {}", path))?;
         }
         write_file(self.jbd, self.fs, path, 0, data)
             .map_err(|e| anyhow!("write failed: {e:?}"))?;
@@ -170,9 +232,7 @@ impl FsOps for Ext4Ops<'_> {
     }
 
     fn rm(&mut self, path: &str, recursive: bool) -> Result<()> {
-        let (_, inode) = get_file_inode(self.fs, self.jbd, path)
-            .map_err(|e| anyhow!("lookup failed: {e:?}"))?
-            .ok_or_else(|| anyhow!("path not found"))?;
+        let inode = self.resolve_path(path)?;
         if inode.is_dir() {
             if !recursive {
                 bail!("directory requires -r");
@@ -186,9 +246,7 @@ impl FsOps for Ext4Ops<'_> {
 
     fn mv(&mut self, src: &str, dst: &str, force: bool) -> Result<()> {
         if !force
-            && get_file_inode(self.fs, self.jbd, dst)
-                .map_err(|e| anyhow!("lookup failed: {e:?}"))?
-                .is_some()
+            && self.resolve_path(dst).is_ok()
         {
             bail!("destination exists, use -f to overwrite");
         }
@@ -197,9 +255,7 @@ impl FsOps for Ext4Ops<'_> {
     }
 
     fn is_dir(&mut self, path: &str) -> Result<bool> {
-        let (_, inode) = get_file_inode(self.fs, self.jbd, normalize_image_path(path).as_str())
-            .map_err(|e| anyhow!("lookup failed: {e:?}"))?
-            .ok_or_else(|| anyhow!("path not found"))?;
+        let inode = self.resolve_path(path)?;
         Ok(inode.is_dir())
     }
 }
