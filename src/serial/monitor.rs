@@ -68,9 +68,10 @@ pub fn run(port_name: &str, baud_rate: u32) -> anyhow::Result<()> {
 
     while running.load(Ordering::Relaxed) {
         // Poll for events to avoid blocking forever so we can check 'running'
-        if event::poll(Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
-                match key.code {
+        if event::poll(Duration::from_millis(100))?
+            && let Event::Key(key) = event::read()?
+        {
+            match key.code {
                     // Exit condition: Ctrl + ]
                     // Note: On some terminals/OSs (like macOS), Ctrl+] generates 0x1D (GS),
                     // which crossterm might report as Ctrl+5 because Ctrl+5 also maps to 0x1D.
@@ -96,19 +97,19 @@ pub fn run(port_name: &str, baud_rate: u32) -> anyhow::Result<()> {
                         // This handles Ctrl+C (0x03) correctly sending it to device
                         // instead of sending literal "c"
                         let byte = c as u8;
-                        if byte >= b'a' && byte <= b'z' {
+                        if (b'a'..=b'z').contains(&byte) {
                             serial_tx.write_all(&[byte - b'a' + 1])?;
-                        } else if byte >= b'A' && byte <= b'Z' {
-                             serial_tx.write_all(&[byte - b'A' + 1])?;
+                        } else if (b'A'..=b'Z').contains(&byte) {
+                            serial_tx.write_all(&[byte - b'A' + 1])?;
                         } else {
                             // Verify specific cases like Ctrl+\, etc if needed.
                             // For now, fallback to raw char if we can't map simply,
                             // or just ignore. Ideally we map standard ASCII control ranges.
                             // But usually just a-z is enough for basic usage.
                             // Let's at least try to send what they typed if it's not simple alpha
-                             let mut buf = [0; 4];
-                             let s = c.encode_utf8(&mut buf);
-                             serial_tx.write_all(s.as_bytes())?;
+                            let mut buf = [0; 4];
+                            let s = c.encode_utf8(&mut buf);
+                            serial_tx.write_all(s.as_bytes())?;
                         }
                     }
 
@@ -130,7 +131,6 @@ pub fn run(port_name: &str, baud_rate: u32) -> anyhow::Result<()> {
                     // You might need to handle arrows/special keys here if needed
                     _ => {}
                 }
-            }
         }
     }
 

@@ -114,12 +114,12 @@ pub fn get_file(server: &str, token: &str, output: Option<&Path>) -> Result<()> 
                 info!("Download success: {}", output_dir.display());
             } else {
                 let output_path = resolve_output_path(output, &filename);
-                if let Some(parent) = output_path.parent() {
-                    if !parent.as_os_str().is_empty() {
-                        fs::create_dir_all(parent).with_context(|| {
-                            format!("Failed to create directory: {}", parent.display())
-                        })?;
-                    }
+                if let Some(parent) = output_path.parent()
+                    && !parent.as_os_str().is_empty()
+                {
+                    fs::create_dir_all(parent).with_context(|| {
+                        format!("Failed to create directory: {}", parent.display())
+                    })?;
                 }
                 fs::write(&output_path, &bytes)
                     .with_context(|| format!("Failed to write file: {}", output_path.display()))?;

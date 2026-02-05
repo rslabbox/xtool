@@ -49,9 +49,9 @@ pub async fn run(server: String, port: u16) -> Result<()> {
                          if key.modifiers.contains(KeyModifiers::CONTROL) {
                              let byte = c as u8;
                              // Map a=1, z=26 for Ctrl+Key
-                             if byte >= b'a' && byte <= b'z' {
+                             if (b'a'..=b'z').contains(&byte) {
                                  bytes.push(byte - b'a' + 1);
-                             } else if byte >= b'A' && byte <= b'Z' {
+                             } else if (b'A'..=b'Z').contains(&byte) {
                                  bytes.push(byte - b'A' + 1);
                              } else {
                                   // Basic fallback

@@ -110,11 +110,11 @@ impl<T: Socket + ?Sized> Worker<T> {
 
             match handle_receive() {
                 Ok(size) => {
-                    if let Some(tsize) = opt_tsize {
-                        if tsize != size {
-                            log::error!("Size mismatch, negotiated: {tsize}, transferred: {size}");
-                            return false;
-                        }
+                    if let Some(tsize) = opt_tsize
+                        && tsize != size
+                    {
+                        log::error!("Size mismatch, negotiated: {tsize}, transferred: {size}");
+                        return false;
                     }
 
                     log::info!(
@@ -429,10 +429,10 @@ impl<T: Socket + ?Sized> Worker<T> {
 
     fn check_response(&self) -> anyhow::Result<()> {
         let pkt = self.socket.recv()?;
-        if let Packet::Ack(received_block_number) = pkt {
-            if received_block_number == 0 {
-                return Ok(());
-            }
+        if let Packet::Ack(received_block_number) = pkt
+            && received_block_number == 0
+        {
+            return Ok(());
         }
 
         self.socket.send(&Packet::Error {

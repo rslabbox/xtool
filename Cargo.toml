@@ -6,7 +6,7 @@ description = "Amazing Tools"
 documentation = "https://docs.rs/xtool"
 keywords = ["amazing", "tools", "xtool"]
 categories = ["command-line-utilities", "development-tools"]
-authors = [ "Debin <luodeb@outlook.com>" ]
+authors = ["Debin <luodeb@outlook.com>"]
 license = "Apache-2.0"
 homepage = "https://github.com/rslabbox/xtool.git"
 repository = "https://github.com/rslabbox/xtool.git"
@@ -17,7 +17,6 @@ clap = { version = "4.5", features = ["derive"] }
 tokio = { version = "1.49", features = ["full"] }
 log = "0.4"
 env_logger = "0.11"
-chrono = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.9"
 humantime-serde = "1.1"
@@ -35,6 +34,12 @@ urlencoding = "2.1"
 qiniu-upload-token = "0.2.4"
 qiniu-sdk = { version = "0.2.4", features = ["upload", "credential", "ureq"] }
 indicatif = "0.18.3"
+
+rsext4 = {version = "0.1.0-pre.0",default-features = false }
+gpt = { version = "4.1.0", features = ["log"] }
+serde_json = "1.0"
+bitflags = { version = "2", default-features = false }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 [dev-dependencies]
 serial_test = "3.2"

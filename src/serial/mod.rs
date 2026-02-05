@@ -77,10 +77,10 @@ pub fn run(
                 .iter()
                 .map(|p| {
                     let mut desc = p.port_name.clone();
-                    if let SerialPortType::UsbPort(info) = &p.port_type {
-                        if let Some(product) = &info.product {
-                            desc.push_str(&format!(" - {}", product));
-                        }
+                    if let SerialPortType::UsbPort(info) = &p.port_type
+                        && let Some(product) = &info.product
+                    {
+                        desc.push_str(&format!(" - {}", product));
                     }
                     desc
                 })

@@ -1,16 +1,9 @@
-mod config;
-mod file;
-mod http;
-mod serial;
-mod tftp;
-
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use log::{error, info};
 use std::path::PathBuf;
 
-#[macro_use]
-extern crate log;
+use xtool::{config, disk, file, http, serial, tftp};
 
 #[derive(Parser)]
 #[command(name = "xtool")]
@@ -88,6 +81,9 @@ enum Commands {
         #[arg(short = 'd', long, default_value = ".")]
         path: PathBuf,
     },
+
+    /// Disk image utilities
+    Disk(disk::DiskCli),
 }
 
 fn main() -> Result<()> {
@@ -181,6 +177,10 @@ fn main() -> Result<()> {
 
         Commands::Http { port, path } => {
             http::run(port, path)?;
+        }
+
+        Commands::Disk(cmd) => {
+            disk::run(cmd)?;
         }
     }
 

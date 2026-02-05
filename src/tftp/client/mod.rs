@@ -41,14 +41,14 @@
 //! xtool tftpc put 192.168.1.100 local.txt [remote.txt]
 //! ```
 
-pub mod client;
+mod client_impl;
 pub mod config;
 
 use anyhow::Result;
 use clap::Subcommand;
 use std::path::PathBuf;
 
-pub use client::Client;
+pub use client_impl::Client;
 
 #[derive(Subcommand)]
 pub enum TftpcAction {

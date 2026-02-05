@@ -106,7 +106,7 @@ impl Packet {
 /// use xtool::tftp::core::packet::Opcode;
 ///
 /// assert_eq!(Opcode::from_u16(3).unwrap(), Opcode::Data);
-/// assert_eq!(Opcode::Ack.as_bytes(), [0x00, 0x04]);
+/// assert_eq!(Opcode::Ack.to_bytes(), [0x00, 0x04]);
 /// ```
 #[repr(u16)]
 #[derive(Debug, PartialEq)]
@@ -140,7 +140,7 @@ impl Opcode {
     }
 
     /// Converts a [`u16`] to a [`u8`] array with 2 elements.
-    pub const fn as_bytes(self) -> [u8; 2] {
+    pub const fn to_bytes(self) -> [u8; 2] {
         (self as u16).to_be_bytes()
     }
 }
@@ -156,7 +156,7 @@ impl Opcode {
 /// use xtool::tftp::core::ErrorCode;
 ///
 /// assert_eq!(ErrorCode::from_u16(3).unwrap(), ErrorCode::DiskFull);
-/// assert_eq!(ErrorCode::FileExists.as_bytes(), [0x00, 0x06]);
+/// assert_eq!(ErrorCode::FileExists.to_bytes(), [0x00, 0x06]);
 /// ```
 #[repr(u16)]
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -199,7 +199,7 @@ impl ErrorCode {
     }
 
     /// Converts an [`ErrorCode`] to a [`u8`] array with 2 elements.
-    pub fn as_bytes(self) -> [u8; 2] {
+    pub fn to_bytes(self) -> [u8; 2] {
         (self as u16).to_be_bytes()
     }
 }
@@ -303,7 +303,7 @@ fn parse_error(buf: &[u8]) -> anyhow::Result<Packet> {
 
 fn serialize_rrq(filename: &String, mode: &String, options: &Vec<TransferOption>) -> Vec<u8> {
     let mut buf = [
-        &Opcode::Rrq.as_bytes(),
+        &Opcode::Rrq.to_bytes(),
         filename.as_bytes(),
         &[0x00],
         mode.as_bytes(),
@@ -319,7 +319,7 @@ fn serialize_rrq(filename: &String, mode: &String, options: &Vec<TransferOption>
 
 fn serialize_wrq(filename: &String, mode: &String, options: &Vec<TransferOption>) -> Vec<u8> {
     let mut buf = [
-        &Opcode::Wrq.as_bytes(),
+        &Opcode::Wrq.to_bytes(),
         filename.as_bytes(),
         &[0x00],
         mode.as_bytes(),
@@ -335,7 +335,7 @@ fn serialize_wrq(filename: &String, mode: &String, options: &Vec<TransferOption>
 
 fn serialize_data(block_num: &u16, data: &Vec<u8>) -> Vec<u8> {
     [
-        &Opcode::Data.as_bytes(),
+        &Opcode::Data.to_bytes(),
         &block_num.to_be_bytes(),
         data.as_slice(),
     ]
@@ -343,13 +343,13 @@ fn serialize_data(block_num: &u16, data: &Vec<u8>) -> Vec<u8> {
 }
 
 fn serialize_ack(block_num: &u16) -> Vec<u8> {
-    [Opcode::Ack.as_bytes(), block_num.to_be_bytes()].concat()
+    [Opcode::Ack.to_bytes(), block_num.to_be_bytes()].concat()
 }
 
 fn serialize_error(code: &ErrorCode, msg: &String) -> Vec<u8> {
     [
-        &Opcode::Error.as_bytes()[..],
-        &code.as_bytes()[..],
+        &Opcode::Error.to_bytes()[..],
+        &code.to_bytes()[..],
         msg.as_bytes(),
         &[0x00],
     ]
@@ -357,7 +357,7 @@ fn serialize_error(code: &ErrorCode, msg: &String) -> Vec<u8> {
 }
 
 fn serialize_oack(options: &Vec<TransferOption>) -> Vec<u8> {
-    let mut buf = Opcode::Oack.as_bytes().to_vec();
+    let mut buf = Opcode::Oack.to_bytes().to_vec();
 
     for option in options {
         buf = [buf, option.as_bytes()].concat();
@@ -373,7 +373,7 @@ mod tests {
     #[test]
     fn parses_read_request() {
         let buf = [
-            &Opcode::Rrq.as_bytes()[..],
+            &Opcode::Rrq.to_bytes()[..],
             ("test.png".as_bytes()),
             &[0x00],
             ("octet".as_bytes()),
@@ -398,7 +398,7 @@ mod tests {
     #[test]
     fn parses_read_request_with_options() {
         let buf = [
-            &Opcode::Rrq.as_bytes()[..],
+            &Opcode::Rrq.to_bytes()[..],
             ("test.png".as_bytes()),
             &[0x00],
             ("octet".as_bytes()),
@@ -456,7 +456,7 @@ mod tests {
     #[test]
     fn parses_write_request() {
         let buf = [
-            &Opcode::Wrq.as_bytes()[..],
+            &Opcode::Wrq.to_bytes()[..],
             ("test.png".as_bytes()),
             &[0x00],
             ("octet".as_bytes()),
@@ -481,7 +481,7 @@ mod tests {
     #[test]
     fn parses_write_request_with_options() {
         let buf = [
-            &Opcode::Wrq.as_bytes()[..],
+            &Opcode::Wrq.to_bytes()[..],
             ("test.png".as_bytes()),
             &[0x00],
             ("octet".as_bytes()),
@@ -528,7 +528,7 @@ mod tests {
     #[test]
     fn parses_data() {
         let buf = [
-            &Opcode::Data.as_bytes()[..],
+            &Opcode::Data.to_bytes()[..],
             &5u16.to_be_bytes(),
             &[
                 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C,
@@ -551,7 +551,7 @@ mod tests {
 
     #[test]
     fn parses_ack() {
-        let buf = [&Opcode::Ack.as_bytes()[..], &12u16.to_be_bytes()].concat();
+        let buf = [&Opcode::Ack.to_bytes()[..], &12u16.to_be_bytes()].concat();
 
         if let Ok(Packet::Ack(block_num)) = parse_ack(&buf) {
             assert_eq!(block_num, 12);
@@ -563,7 +563,7 @@ mod tests {
     #[test]
     fn parses_oack() {
         let buf = [
-            &Opcode::Oack.as_bytes()[..],
+            &Opcode::Oack.to_bytes()[..],
             (OptionType::TransferSize.as_str().as_bytes()),
             &[0x00],
             ("0".as_bytes()),
@@ -610,8 +610,8 @@ mod tests {
     #[test]
     fn parses_error() {
         let buf = [
-            &Opcode::Error.as_bytes()[..],
-            &ErrorCode::FileExists.as_bytes(),
+            &Opcode::Error.to_bytes()[..],
+            &ErrorCode::FileExists.to_bytes(),
             "file already exists".as_bytes(),
             &[0x00],
         ]
@@ -628,8 +628,8 @@ mod tests {
     #[test]
     fn parses_error_without_message() {
         let buf = [
-            &Opcode::Error.as_bytes()[..],
-            &ErrorCode::FileExists.as_bytes(),
+            &Opcode::Error.to_bytes()[..],
+            &ErrorCode::FileExists.to_bytes(),
             &[0x00],
         ]
         .concat();

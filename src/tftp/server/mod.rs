@@ -6,7 +6,7 @@
 //! - `config`: Server configuration
 
 pub mod config;
-mod server;
+mod server_impl;
 mod worker;
 
 use anyhow::Result;
@@ -14,7 +14,7 @@ use std::path::PathBuf;
 
 // Public server types
 pub use config::Config;
-pub use server::Server;
+pub use server_impl::Server;
 pub use worker::Worker;
 
 /// Run the TFTP server with CLI arguments and optional configuration
