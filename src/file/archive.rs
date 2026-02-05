@@ -225,7 +225,7 @@ pub fn decrypt_zip_bytes(bytes: &[u8], key: &str) -> Result<Vec<u8>> {
 
 fn encrypt_zip_bytes(bytes: &[u8], key: &str) -> Result<Vec<u8>> {
     let mut salt = [0u8; SALT_LEN];
-    let mut rng = rand::rngs::OsRng;
+    let mut rng = rand::rng();
     rng.fill_bytes(&mut salt);
 
     let mut key_bytes = [0u8; 32];

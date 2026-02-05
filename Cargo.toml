@@ -1,6 +1,6 @@
 [package]
 name = "xtool"
-version = "0.0.13"
+version = "0.0.14"
 edition = "2024"
 description = "Amazing Tools"
 documentation = "https://docs.rs/xtool"
@@ -27,7 +27,6 @@ dialoguer = "0.12.0"
 reqwest = { version = "0.13.1", features = ["blocking", "json"] }
 tempfile = "3.12"
 walkdir = "2.5"
-zip = "7.2.0"
 tiny_http = "0.12"
 mime_guess = "2.0"
 urlencoding = "2.1"
@@ -37,7 +36,10 @@ indicatif = "0.18.3"
 aes-gcm = "0.10"
 pbkdf2 = "0.12"
 sha2 = "0.10"
-rand = "0.8"
+rand = "0.9"
+
+zip = "7.3"
+crc = "=3.3.0"
 
 rsext4 = {version = "0.1.0-pre.0",default-features = false }
 gpt = { version = "4.1.0", features = ["log"] }
