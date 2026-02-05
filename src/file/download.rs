@@ -1,11 +1,16 @@
-use crate::file::archive::{resolve_output_dir, resolve_output_path, unzip_to_dir, write_temp_zip, MAX_FILE_SIZE};
+use crate::file::archive::{
+    decrypt_zip_bytes, detect_archive_hint, is_encrypted_zip, resolve_output_dir,
+    resolve_output_path, unzip_single_from_bytes, unzip_to_dir, write_temp_zip, ArchiveHint,
+    MAX_FILE_SIZE,
+};
 use crate::file::{ContentType, DownloadResponse};
 use anyhow::{Context, Result};
+use dialoguer::Input;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::info;
 use std::{fs, io::Read, path::Path};
 
-pub fn get_file(server: &str, token: &str, output: Option<&Path>) -> Result<()> {
+pub fn get_file(server: &str, token: &str, output: Option<&Path>, key: Option<&str>) -> Result<()> {
     let client = reqwest::blocking::Client::new();
     let url = format!("{}/download/{}", normalize_server(server), token);
     let response = client
@@ -105,13 +110,25 @@ pub fn get_file(server: &str, token: &str, output: Option<&Path>) -> Result<()> 
 
             progress.finish_and_clear();
 
-            if filename.ends_with(".zip") {
-                let temp_path = write_temp_zip(&bytes)?;
-                let output_dir = resolve_output_dir(output, &filename)?;
-                let unzip_result = unzip_to_dir(&temp_path, &output_dir);
-                let _ = fs::remove_file(&temp_path);
-                unzip_result?;
-                info!("Download success: {}", output_dir.display());
+            let (clean_name, hint) = detect_archive_hint(&filename);
+            let looks_like_zip = filename.ends_with(".zip")
+                || hint != ArchiveHint::None
+                || is_encrypted_zip(&bytes)
+                || bytes.starts_with(b"PK\x03\x04");
+
+            if looks_like_zip {
+                match hint {
+                    ArchiveHint::File => {
+                        let output_path = resolve_output_path(output, &clean_name);
+                        handle_zip_download(&bytes, key, &output_path, ArchiveHint::File)?;
+                        info!("Download success: {}", output_path.display());
+                    }
+                    ArchiveHint::Dir | ArchiveHint::None => {
+                        let output_dir = resolve_output_dir(output, &clean_name)?;
+                        handle_zip_download(&bytes, key, &output_dir, ArchiveHint::Dir)?;
+                        info!("Download success: {}", output_dir.display());
+                    }
+                }
             } else {
                 let output_path = resolve_output_path(output, &filename);
                 if let Some(parent) = output_path.parent()
@@ -134,6 +151,57 @@ pub fn get_file(server: &str, token: &str, output: Option<&Path>) -> Result<()> 
     }
 
     Ok(())
+}
+
+fn handle_zip_download(
+    bytes: &[u8],
+    key: Option<&str>,
+    output_path: &Path,
+    hint: ArchiveHint,
+) -> Result<()> {
+    if let Some(key) = key {
+        if key.trim().is_empty() {
+            return Err(anyhow::anyhow!("Decryption key cannot be empty"));
+        }
+        let decrypted = if is_encrypted_zip(bytes) {
+            decrypt_zip_bytes(bytes, key)?
+        } else {
+            bytes.to_vec()
+        };
+        return unzip_from_bytes(&decrypted, output_path, hint);
+    }
+
+    let unzip_result = unzip_from_bytes(bytes, output_path, hint);
+    match unzip_result {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            if !is_encrypted_zip(bytes) {
+                return Err(err);
+            }
+            let prompt = "Enter key";
+            let input_key = Input::<String>::new()
+                .with_prompt(prompt)
+                .allow_empty(true)
+                .interact()
+                .context("Failed to read key")?;
+            let input_key = input_key.trim();
+            if input_key.is_empty() {
+                return Err(err);
+            }
+            let decrypted = decrypt_zip_bytes(bytes, input_key)?;
+            unzip_from_bytes(&decrypted, output_path, hint)
+        }
+    }
+}
+
+fn unzip_from_bytes(bytes: &[u8], output_path: &Path, hint: ArchiveHint) -> Result<()> {
+    if hint == ArchiveHint::File {
+        return unzip_single_from_bytes(bytes, output_path);
+    }
+    let temp_path = write_temp_zip(bytes)?;
+    let unzip_result = unzip_to_dir(&temp_path, output_path);
+    let _ = fs::remove_file(&temp_path);
+    unzip_result
 }
 
 fn normalize_server(server: &str) -> String {

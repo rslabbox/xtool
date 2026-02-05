@@ -1,6 +1,6 @@
 [package]
 name = "xtool"
-version = "0.0.12"
+version = "0.0.13"
 edition = "2024"
 description = "Amazing Tools"
 documentation = "https://docs.rs/xtool"
@@ -34,6 +34,10 @@ urlencoding = "2.1"
 qiniu-upload-token = "0.2.4"
 qiniu-sdk = { version = "0.2.4", features = ["upload", "credential", "ureq"] }
 indicatif = "0.18.3"
+aes-gcm = "0.10"
+pbkdf2 = "0.12"
+sha2 = "0.10"
+rand = "0.8"
 
 rsext4 = {version = "0.1.0-pre.0",default-features = false }
 gpt = { version = "4.1.0", features = ["log"] }

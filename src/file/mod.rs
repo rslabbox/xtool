@@ -13,25 +13,25 @@ const DEFAULT_SERVER_URL: &str = "http://a.debin.cc:8080";
 pub enum FileAction {
     /// Upload a file and return a token
     Send {
-        /// File path to upload
-        #[arg(value_name = "FILE", conflicts_with_all = ["dirpath", "message"])]
-        filepath: Option<PathBuf>,
-
-        /// Directory path to upload (will be compressed)
-        #[arg(short = 'd', long, value_name = "DIR", conflicts_with_all = ["filepath", "message"])]
-        dirpath: Option<PathBuf>,
+        /// File or directory path to upload
+        #[arg(value_name = "PATH", conflicts_with_all = ["message"])]
+        path: Option<PathBuf>,
 
         /// Download limit (1-10)
         #[arg(short, long, default_value_t = 1)]
         limit: u8,
 
         /// Send a message as a message file (no file upload)
-        #[arg(short = 'm', long, conflicts_with_all = ["filepath", "dirpath"])]
+        #[arg(short = 'm', long, conflicts_with_all = ["path"])]
         message: Option<String>,
 
         /// Server URL (e.g. http://localhost:8080)
         #[arg(short, long, default_value = DEFAULT_SERVER_URL)]
         server: String,
+
+        /// Encryption key for uploaded archives
+        #[arg(short = 'k', long)]
+        key: Option<String>,
     },
 
     /// Download a file by token
@@ -47,6 +47,10 @@ pub enum FileAction {
         /// Server URL (e.g. http://localhost:8080)
         #[arg(short, long, default_value = DEFAULT_SERVER_URL)]
         server: String,
+
+        /// Decryption key for encrypted archives
+        #[arg(short = 'k', long)]
+        key: Option<String>,
     },
 }
 
@@ -75,22 +79,23 @@ struct DownloadResponse {
 pub fn run(action: FileAction) -> Result<()> {
     match action {
         FileAction::Send {
-            filepath,
-            dirpath,
+            path,
             limit,
             message,
             server,
+            key,
         } => upload::send_file(
             &server,
-            filepath.as_deref(),
-            dirpath.as_deref(),
+            path.as_deref(),
             limit,
             message.as_deref(),
+            key.as_deref(),
         ),
         FileAction::Get {
             token,
             output,
             server,
-        } => download::get_file(&server, &token, output.as_deref()),
+            key,
+        } => download::get_file(&server, &token, output.as_deref(), key.as_deref()),
     }
 }
