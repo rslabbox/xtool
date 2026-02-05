@@ -40,6 +40,7 @@ rand = "0.9"
 
 zip = "7.3"
 crc = "=3.3.0"
+lzma-rust2 = "0.15.7"
 
 rsext4 = {version = "0.1.0-pre.0",default-features = false }
 gpt = { version = "4.1.0", features = ["log"] }
